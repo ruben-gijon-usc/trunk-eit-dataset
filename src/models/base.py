@@ -20,3 +20,6 @@ class Trunk:
     radius: float
     base_conductivity: float
     anomalies: list[Anomaly] = field(default_factory=list)
+
+    def to_json(self) -> dict:
+        pass
