@@ -1,10 +1,13 @@
 from dataclasses import dataclass, field
-
+import math as m
 
 @dataclass
 class Pos:
     r: float = 0. # m
     phi: float = 0. # radians
+
+    def to_cartesian(self) -> tuple[float, float]:
+        return self.r * m.cos(self.phi), self.r * m.sin(self.phi)
 
 @dataclass
 class Anomaly:
