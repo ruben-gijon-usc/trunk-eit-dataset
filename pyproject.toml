@@ -1,0 +1,12 @@
+[project]
+name = "trunk-eit-dataset"
+version = "0.1.0"
+description = "ML dataset generation for EIT applied to tree trunks"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+]
+
+[project.optional-dependencies]
+eidors = []
+dev = []
