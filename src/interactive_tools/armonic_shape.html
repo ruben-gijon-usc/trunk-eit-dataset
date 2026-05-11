@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Tronco - Series de Fourier (Incluyendo a1 y b1)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+            background-color: #f0f4f8;
+            color: #333;
+        }
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .controls {
+            flex: 1;
+            min-width: 300px;
+            max-width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .canvas-container {
+            flex: 2;
+            min-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+        }
+        .slider-group {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .slider-group h4 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        .slider-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .slider-row label {
+            width: 40px;
+            font-weight: bold;
+        }
+        .slider-row input[type="range"] {
+            flex: 1;
+            margin: 0 10px;
+        }
+        .slider-row span {
+            width: 40px;
+            text-align: right;
+            font-family: monospace;
+        }
+        #warning {
+            color: #e74c3c;
+            font-weight: bold;
+            margin-top: 10px;
+            min-height: 24px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="panel controls">
+        <h3>Parámetros de Forma</h3>
+        
+        <div class="slider-group">
+            <h4>Radio Base (R₀)</h4>
+            <div class="slider-row">
+                <label>R₀</label>
+                <input type="range" id="r0" min="0.1" max="1.0" step="0.01" value="0.5">
+                <span id="val-r0">0.50</span>
+            </div>
+        </div>
+
+        <div class="slider-group">
+            <h4>Armónico 1 (Desplazamiento)</h4>
+            <div class="slider-row">
+                <label>a₁</label>
+                <input type="range" id="a1" min="-0.2" max="0.2" step="0.01" value="0">
+                <span id="val-a1">0.00</span>
+            </div>
+            <div class="slider-row">
+                <label>b₁</label>
+                <input type="range" id="b1" min="-0.2" max="0.2" step="0.01" value="0">
+                <span id="val-b1">0.00</span>
+            </div>
+        </div>
+
+        <div class="slider-group">
+            <h4>Armónico 2 (Elíptico)</h4>
+            <div class="slider-row">
+                <label>a₂</label>
+                <input type="range" id="a2" min="-0.3" max="0.3" step="0.01" value="0">
+                <span id="val-a2">0.00</span>
+            </div>
+            <div class="slider-row">
+                <label>b₂</label>
+                <input type="range" id="b2" min="-0.3" max="0.3" step="0.01" value="0">
+                <span id="val-b2">0.00</span>
+            </div>
+        </div>
+
+        <div class="slider-group">
+            <h4>Armónico 3 (Triangular)</h4>
+            <div class="slider-row">
+                <label>a₃</label>
+                <input type="range" id="a3" min="-0.15" max="0.15" step="0.01" value="0">
+                <span id="val-a3">0.00</span>
+            </div>
+            <div class="slider-row">
+                <label>b₃</label>
+                <input type="range" id="b3" min="-0.15" max="0.15" step="0.01" value="0">
+                <span id="val-b3">0.00</span>
+            </div>
+        </div>
+
+        <div class="slider-group">
+            <h4>Armónico 4 (Cuadrado)</h4>
+            <div class="slider-row">
+                <label>a₄</label>
+                <input type="range" id="a4" min="-0.1" max="0.1" step="0.01" value="0">
+                <span id="val-a4">0.00</span>
+            </div>
+            <div class="slider-row">
+                <label>b₄</label>
+                <input type="range" id="b4" min="-0.1" max="0.1" step="0.01" value="0">
+                <span id="val-b4">0.00</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel canvas-container">
+        <canvas id="canvas" width="500" height="500"></canvas>
+        <div id="warning"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const scale = 200; // Pixeles por metro
+
+        // Añadidos a1 y b1 al array de inputs
+        const inputs = ['r0', 'a1', 'b1', 'a2', 'b2', 'a3', 'b3', 'a4', 'b4'];
+        const values = {};
+
+        function updateValues() {
+            inputs.forEach(id => {
+                const val = parseFloat(document.getElementById(id).value);
+                values[id] = val;
+                document.getElementById(`val-${id}`).innerText = val.toFixed(2);
+            });
+            draw();
+        }
+
+        inputs.forEach(id => {
+            document.getElementById(id).addEventListener('input', updateValues);
+        });
+
+        function getRadius(theta) {
+            let r = values.r0;
+            // Evaluando la fórmula completa incluyendo el armónico 1
+            r += values.a1 * Math.cos(theta) + values.b1 * Math.sin(theta);
+            r += values.a2 * Math.cos(2 * theta) + values.b2 * Math.sin(2 * theta);
+            r += values.a3 * Math.cos(3 * theta) + values.b3 * Math.sin(3 * theta);
+            r += values.a4 * Math.cos(4 * theta) + values.b4 * Math.sin(4 * theta);
+            return r;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            
+            // Dibujar grid y ejes
+            ctx.strokeStyle = '#eee';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, centerY); ctx.lineTo(width, centerY);
+            ctx.moveTo(centerX, 0); ctx.lineTo(centerX, height);
+            ctx.stroke();
+
+            // Dibujar círculo base de referencia
+            ctx.strokeStyle = 'rgba(52, 152, 219, 0.3)';
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, values.r0 * scale, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Calcular puntos de la forma
+            const points = [];
+            let isInvalid = false;
+            const steps = 200;
+
+            for (let i = 0; i <= steps; i++) {
+                const theta = (i / steps) * 2 * Math.PI;
+                const r = getRadius(theta);
+                
+                if (r <= 0) isInvalid = true;
+
+                const x = centerX + r * scale * Math.cos(theta);
+                const y = centerY + r * scale * Math.sin(theta);
+                points.push({x, y});
+            }
+
+            // Mostrar advertencia si el radio es negativo
+            const warningEl = document.getElementById('warning');
+            if (isInvalid) {
+                warningEl.innerText = "⚠️ Advertencia: Geometría inválida (Auto-intersección / Radio negativo)";
+                ctx.fillStyle = 'rgba(231, 76, 60, 0.5)';
+                ctx.strokeStyle = '#c0392b';
+            } else {
+                warningEl.innerText = "";
+                ctx.fillStyle = 'rgba(46, 204, 113, 0.5)';
+                ctx.strokeStyle = '#27ae60';
+            }
+
+            // Dibujar la forma principal
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Dibujar punto central original (origen de coordenadas)
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        // Inicializar
+        updateValues();
+    </script>
+</body>
+</html>

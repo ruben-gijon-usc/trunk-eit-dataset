@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 
 from ..models import Anomaly, Pos, Trunk
 from ..eidors.bridge import run_eidors_simulation
-from ..simulation import EITProtocol, eit_simulation, generate_grid
+from ..simulation import generate_grid
 
 
 @dataclass
@@ -28,7 +28,6 @@ class PipelineConfig:
     anomaly_conductivity_range: tuple = (0.01, 0.5)
     num_anomalies_range: tuple = (1, 3)
     anomaly_radius_range: tuple = (0.1, 0.4)
-    protocol: EITProtocol | None = None
     use_eidors: bool = True
     n_electrodes: int = 16
 
@@ -86,18 +85,14 @@ def generate_dataset(config: PipelineConfig) -> list[DatasetSample]:
     Returns:
         List of dataset samples containing voltages and ground truth.
     """
-    if config.protocol is None:
-        config.protocol = EITProtocol()
-
     samples = []
 
     for i in range(config.num_samples):
         trunk = generate_random_trunk(config)
         grid = generate_grid(trunk, config.grid_resolution)
-        voltages = eit_simulation(grid, config.protocol, trunk.radius)
 
         sample = DatasetSample(
-            voltages=voltages,
+            voltages=np.array([]),
             conductivity_map=grid,
             trunk_config=trunk
         )
@@ -109,6 +104,7 @@ def generate_dataset(config: PipelineConfig) -> list[DatasetSample]:
                     n_electrodes=config.n_electrodes
                 )
                 if eidors_result:
+                    sample.voltages = eidors_result.voltages
                     sample.mesh_voltages = eidors_result.voltages
                     sample.mesh_elem_data = eidors_result.elem_data
                     sample.mesh_nodes = eidors_result.mesh.nodes

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación de Tronco e Impurezas (Coordenadas Polares y Fourier)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 20px;
+            background-color: #f4f6f9;
+            color: #2c3e50;
+            margin: 0;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        .controls-container {
+            flex: 1;
+            min-width: 350px;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            padding-right: 10px;
+            height: calc(100vh - 40px);
+        }
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            border: 1px solid #e1e8ed;
+        }
+        .panel h3 {
+            margin-top: 0;
+            color: #34495e;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .canvas-container {
+            flex: 2;
+            min-width: 450px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            padding: 20px;
+            border: 1px solid #e1e8ed;
+        }
+        canvas {
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.03);
+        }
+        .slider-group {
+            margin-bottom: 12px;
+            background: #f8fafc;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .slider-group h4 {
+            margin: 0 0 10px 0;
+            font-size: 0.9em;
+            color: #7f8c8d;
+            text-transform: uppercase;
+        }
+        .slider-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            font-size: 0.9em;
+        }
+        .slider-row label {
+            width: 45px;
+            font-weight: 600;
+        }
+        .slider-row input[type="range"] {
+            flex: 1;
+            margin: 0 10px;
+            accent-color: #3498db;
+        }
+        .slider-row span {
+            width: 45px;
+            text-align: right;
+            font-family: 'Courier New', Courier, monospace;
+            background: #eef2f5;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+        .warning {
+            color: #e74c3c;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-top: 10px;
+            min-height: 20px;
+        }
+        .color-indicator {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls-container" id="controls">
+        <!-- Los paneles se generarán dinámicamente con JavaScript -->
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="canvas" width="600" height="600"></canvas>
+    </div>
+
+    <script>
+        const TRUNK_RADIUS = 0.8; // Radio fijo del tronco en metros
+        const SCALE = 300;        // Píxeles por metro (0.8m = 240px)
+        
+        // Configuración de los parámetros para generar la interfaz automáticamente
+        const paramsConfig = [
+            { id: 'pos_r', label: 'r (Pos)', min: 0, max: 0.8, step: 0.01, group: 'Posición Polar' },
+            { id: 'pos_phi', label: 'φ (°)', min: 0, max: 360, step: 1, group: 'Posición Polar' },
+            { id: 'r0', label: 'R₀', min: 0.05, max: 0.5, step: 0.01, group: 'Radio Base' },
+            { id: 'a1', label: 'a₁', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 1' },
+            { id: 'b1', label: 'b₁', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 1' },
+            { id: 'a2', label: 'a₂', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 2' },
+            { id: 'b2', label: 'b₂', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 2' },
+            { id: 'a3', label: 'a₃', min: -0.1, max: 0.1, step: 0.01, group: 'Armónico 3' },
+            { id: 'b3', label: 'b₃', min: -0.1, max: 0.1, step: 0.01, group: 'Armónico 3' },
+            { id: 'a4', label: 'a₄', min: -0.05, max: 0.05, step: 0.01, group: 'Armónico 4' },
+            { id: 'b4', label: 'b₄', min: -0.05, max: 0.05, step: 0.01, group: 'Armónico 4' }
+        ];
+
+        // Estado inicial de las impurezas
+        const state = {
+            imp1: { pos_r: 0.3, pos_phi: 45, r0: 0.2, a1: 0, b1: 0, a2: 0.05, b2: 0, a3: 0, b3: 0, a4: 0, b4: 0, color: 'rgba(192, 57, 43, 0.7)', stroke: '#c0392b' },
+            imp2: { pos_r: 0.4, pos_phi: 210, r0: 0.25, a1: 0, b1: 0, a2: -0.05, b2: 0.05, a3: 0.02, b3: -0.02, a4: 0, b4: 0, color: 'rgba(41, 128, 185, 0.7)', stroke: '#2980b9' }
+        };
+
+        function buildUI() {
+            const container = document.getElementById('controls');
+            ['imp1', 'imp2'].forEach((impId, index) => {
+                const title = index === 0 ? 'Impureza 1' : 'Impureza 2';
+                const colorCode = state[impId].color;
+                
+                let html = `<div class="panel">
+                    <h3>
+                        ${title}
+                        <span class="color-indicator" style="background-color: ${state[impId].stroke}"></span>
+                    </h3>`;
+                
+                let currentGroup = '';
+                paramsConfig.forEach(param => {
+                    if (param.group !== currentGroup) {
+                        if (currentGroup !== '') html += `</div>`;
+                        html += `<div class="slider-group"><h4>${param.group}</h4>`;
+                        currentGroup = param.group;
+                    }
+                    const val = state[impId][param.id];
+                    html += `
+                        <div class="slider-row">
+                            <label>${param.label}</label>
+                            <input type="range" id="${impId}_${param.id}" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}">
+                            <span id="val_${impId}_${param.id}">${val.toFixed(2)}</span>
+                        </div>
+                    `;
+                });
+                html += `</div><div id="warning_${impId}" class="warning"></div></div>`;
+                container.innerHTML += html;
+            });
+
+            // Añadir Listeners
+            ['imp1', 'imp2'].forEach(impId => {
+                paramsConfig.forEach(param => {
+                    const input = document.getElementById(`${impId}_${param.id}`);
+                    input.addEventListener('input', (e) => {
+                        const val = parseFloat(e.target.value);
+                        state[impId][param.id] = val;
+                        document.getElementById(`val_${impId}_${param.id}`).innerText = val.toFixed(2);
+                        draw();
+                    });
+                });
+            });
+        }
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        function getShapeRadius(theta, imp) {
+            let r = imp.r0;
+            r += imp.a1 * Math.cos(theta) + imp.b1 * Math.sin(theta);
+            r += imp.a2 * Math.cos(2 * theta) + imp.b2 * Math.sin(2 * theta);
+            r += imp.a3 * Math.cos(3 * theta) + imp.b3 * Math.sin(3 * theta);
+            r += imp.a4 * Math.cos(4 * theta) + imp.b4 * Math.sin(4 * theta);
+            return r;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Dibujar el Tronco (Fondo)
+            ctx.fillStyle = '#fdf3e7'; // Color madera clara
+            ctx.strokeStyle = '#d4ac7f'; // Borde madera
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, TRUNK_RADIUS * SCALE, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+
+            // Dibujar cruces centrales como referencia
+            ctx.strokeStyle = '#e1e8ed';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, centerY); ctx.lineTo(canvas.width, centerY);
+            ctx.moveTo(centerX, 0); ctx.lineTo(centerX, canvas.height);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#95a5a6';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // 2. Dibujar Impurezas
+            ['imp1', 'imp2'].forEach(impId => {
+                const imp = state[impId];
+                const warningEl = document.getElementById(`warning_${impId}`);
+                let isInvalidShape = false;
+                let isOutOfBounds = false;
+
+                // Centro de la impureza en coordenadas cartesianas
+                const phi_rad = imp.pos_phi * (Math.PI / 180);
+                const cx = centerX + imp.pos_r * SCALE * Math.cos(phi_rad);
+                const cy = centerY + imp.pos_r * SCALE * Math.sin(phi_rad);
+
+                const points = [];
+                const steps = 200;
+
+                for (let i = 0; i <= steps; i++) {
+                    const theta = (i / steps) * 2 * Math.PI;
+                    const r = getShapeRadius(theta, imp);
+                    
+                    if (r <= 0) isInvalidShape = true;
+
+                    const px = cx + r * SCALE * Math.cos(theta);
+                    const py = cy + r * SCALE * Math.sin(theta);
+                    
+                    // Comprobar si el punto se sale del tronco
+                    const distToCenter = Math.sqrt(Math.pow(px - centerX, 2) + Math.pow(py - centerY, 2));
+                    if (distToCenter > TRUNK_RADIUS * SCALE) isOutOfBounds = true;
+
+                    points.push({x: px, y: py});
+                }
+
+                // Renderizar forma
+                ctx.fillStyle = imp.color;
+                ctx.strokeStyle = imp.stroke;
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Dibujar el centro polar de la impureza
+                ctx.fillStyle = imp.stroke;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Actualizar advertencias
+                let warnings = [];
+                if (isInvalidShape) warnings.push("⚠️ Auto-intersección (R < 0)");
+                if (isOutOfBounds) warnings.push("⚠️ Fuera del límite del tronco");
+                warningEl.innerHTML = warnings.join("<br>");
+            });
+        }
+
+        // Inicializar
+        buildUI();
+        draw();
+    </script>
+</body>
+</html>
