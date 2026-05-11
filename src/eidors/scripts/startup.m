@@ -1,0 +1,4 @@
+% EIDORS startup script
+% Run this to initialize EIDORS before any other EIDORS operations
+
+run('/home/ruben/Documentos/EIDORS_implementation/eidors_lib/eidors-v3.12/eidors/startup.m');

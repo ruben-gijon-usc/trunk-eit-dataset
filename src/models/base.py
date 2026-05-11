@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
@@ -17,4 +16,4 @@ class Anomaly:
 class Trunk:
     radius: float
     base_conductivity: float
-    anomalies: List[Anomaly] = field(default_factory=list)
+    anomalies: list[Anomaly] = field(default_factory=list)
