@@ -5,9 +5,9 @@ Usage:
     uv run example.py
 """
 
-from src.base import Trunk, Anomaly, Pos
+from src.models import Trunk, Anomaly, Pos
 from src.eidors.bridge import run_eidors_simulation
-from src.grid import generate_grid, grid2png
+from src.simulation import generate_grid, grid2png
 
 
 def main():
