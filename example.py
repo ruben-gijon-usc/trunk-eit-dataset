@@ -20,7 +20,7 @@ from matplotlib.tri import Triangulation
 from matplotlib.patches import Circle as MplCircle, Polygon
 from matplotlib.collections import PolyCollection
 
-from src.models import Trunk, Anomaly, Circle
+from src.models import Trunk, Anomaly, Circle, Pos
 from src.eidors.bridge import run_eidors_simulation
 from src.simulation import generate_grid, grid2png
 
@@ -315,11 +315,10 @@ def main():
         base_conductivity=0.1,
         anomalies=[
             Anomaly(
-                shape=Circle(cx=0.3, cy=0.0, radius=0.15),
-                conductivity=0.5
+shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.15),
             ),
             Anomaly(
-                shape=Circle(cx=-0.2, cy=0.0, radius=0.1),
+                shape=Circle(center=Pos(r=0.2, phi=np.pi), radius=0.1),
                 conductivity=0.8
             )
         ]

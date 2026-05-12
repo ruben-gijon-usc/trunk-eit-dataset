@@ -7,16 +7,11 @@ import numpy as np
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.models import Trunk, Anomaly, Circle, Pos
 from src.simulation import generate_grid, grid2png
-from src.pipeline import (
-    generate_random_trunk,
-    PipelineConfig,
-    generate_dataset,
-    DatasetSample
-)
+from src.pipeline import generate_random_trunk, PipelineConfig, generate_dataset, DatasetSample
 
 
 class TestGrid:
@@ -37,8 +32,8 @@ class TestGrid:
             radius=1.0,
             base_conductivity=0.1,
             anomalies=[
-                Anomaly(shape=Circle(cx=0.3, cy=0.0, radius=0.2), conductivity=0.5)
-            ]
+                Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.2), conductivity=0.5)
+            ],
         )
         grid = generate_grid(trunk, resolution=64)
 
@@ -50,12 +45,12 @@ class TestGrid:
         trunk = Trunk(radius=1.0, base_conductivity=0.1, anomalies=[])
         grid = generate_grid(trunk, resolution=32)
 
-        with open('/tmp/test_grid.png', 'wb') as f:
+        with open("/tmp/test_grid.png", "wb") as f:
             pass
-        grid2png(grid, '/tmp/test_grid.png')
+        grid2png(grid, "/tmp/test_grid.png")
 
-        assert os.path.exists('/tmp/test_grid.png')
-        os.remove('/tmp/test_grid.png')
+        assert os.path.exists("/tmp/test_grid.png")
+        os.remove("/tmp/test_grid.png")
 
 
 class TestPipeline:
@@ -68,7 +63,7 @@ class TestPipeline:
             base_conductivity=0.1,
             num_anomalies_range=(1, 3),
             anomaly_radius_range=(0.1, 0.3),
-            anomaly_conductivity_range=(0.01, 0.5)
+            anomaly_conductivity_range=(0.01, 0.5),
         )
 
         trunk = generate_random_trunk(config)
@@ -94,16 +89,13 @@ class TestBaseModels:
 
     def test_pos_creation(self):
         """Test Pos creation."""
-        pos = Pos(r=0.5, phi=np.pi/4)
+        pos = Pos(r=0.5, phi=np.pi / 4)
         assert pos.r == 0.5
-        assert pos.phi == np.pi/4
+        assert pos.phi == np.pi / 4
 
     def test_anomaly_creation(self):
         """Test Anomaly creation."""
-        anomaly = Anomaly(
-            shape=Circle(cx=0.3, cy=0.0, radius=0.2),
-            conductivity=0.5
-        )
+        anomaly = Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.2), conductivity=0.5)
         assert anomaly.shape.radius == 0.2
         assert anomaly.conductivity == 0.5
 
@@ -113,8 +105,8 @@ class TestBaseModels:
             radius=1.0,
             base_conductivity=0.1,
             anomalies=[
-                Anomaly(shape=Circle(cx=0.3, cy=0.0, radius=0.2), conductivity=0.5)
-            ]
+                Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.2), conductivity=0.5)
+            ],
         )
         assert trunk.radius == 1.0
         assert len(trunk.anomalies) == 1

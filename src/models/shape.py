@@ -6,6 +6,7 @@ from .pos import Pos
 
 class Shape(ABC):
     """Abstract base class for geometric shapes."""
+
     SHAPE_TYPE: str = ""
 
     @abstractmethod
@@ -45,7 +46,7 @@ class CircularShape(Shape):
         x, y = pos.to_cartesian()
         dx = x - self.cx
         dy = y - self.cy
-        r = math.sqrt(dx ** 2 + dy ** 2)
+        r = math.sqrt(dx**2 + dy**2)
         theta = math.atan2(dy, dx)
         return r <= self.get_radius(theta)
 
@@ -56,17 +57,18 @@ class CircularShape(Shape):
             # Calculate angle evenly distributed across 2*PI
             theta = 2 * math.pi * i / n_points
             r = self.get_radius(theta)
-            
+
             # Convert polar to cartesian offsets
             d_x = r * math.cos(theta)
             d_y = r * math.sin(theta)
-            
+
             points.append((self.cx + d_x, self.cy + d_y))
         return points
 
 
 class Circle(CircularShape):
     """Circle shape."""
+
     SHAPE_TYPE = "circle"
 
     def __init__(self, center: Pos, radius: float):
@@ -77,16 +79,12 @@ class Circle(CircularShape):
         return self.radius
 
     def to_dict(self) -> dict:
-        return {
-            "shape_type": self.shape_type,
-            "cx": self.cx,
-            "cy": self.cy,
-            "radius": self.radius
-        }
+        return {"shape_type": self.shape_type, "cx": self.cx, "cy": self.cy, "radius": self.radius}
 
 
 class Ellipse(CircularShape):
     """Ellipse shape with rotation."""
+
     SHAPE_TYPE = "ellipse"
 
     def __init__(self, center: Pos, rx: float, ry: float, rotation: float = 0.0):
@@ -100,7 +98,7 @@ class Ellipse(CircularShape):
         alpha = theta - self.rotation
         cos_a = math.cos(alpha)
         sin_a = math.sin(alpha)
-        
+
         # Prevent division by zero mathematically
         denom = math.sqrt((self.ry * cos_a) ** 2 + (self.rx * sin_a) ** 2)
         if denom == 0:
@@ -114,7 +112,7 @@ class Ellipse(CircularShape):
             "cy": self.cy,
             "rx": self.rx,
             "ry": self.ry,
-            "rotation": self.rotation
+            "rotation": self.rotation,
         }
 
 
@@ -124,6 +122,7 @@ class Harmonic(CircularShape):
     Useful for organic shapes like natural wood anomalies.
     Each harmonic tuple represents (a_n, b_n) coefficients for Cosine and Sine.
     """
+
     SHAPE_TYPE = "harmonic"
 
     def __init__(self, center: Pos, base_radius: float, harmonics: list[tuple[float, float]]):
@@ -144,15 +143,16 @@ class Harmonic(CircularShape):
             "cx": self.cx,
             "cy": self.cy,
             "base_radius": self.base_radius,
-            "harmonics": self.harmonics
+            "harmonics": self.harmonics,
         }
-    
+
     def is_valid(self) -> bool:
         pass
 
 
 class Rectangle(Shape):
     """Axis-aligned rectangle."""
+
     SHAPE_TYPE = "rectangle"
 
     def __init__(self, x_min: float, y_min: float, x_max: float, y_max: float):
@@ -170,11 +170,11 @@ class Rectangle(Shape):
         height = self.y_max - self.y_min
         cos_t = math.cos(theta)
         sin_t = math.sin(theta)
-        
+
         # Ray-box intersection logic to find radius
-        dist_x = abs((width / 2.0) / cos_t) if cos_t != 0 else float('inf')
-        dist_y = abs((height / 2.0) / sin_t) if sin_t != 0 else float('inf')
-        
+        dist_x = abs((width / 2.0) / cos_t) if cos_t != 0 else float("inf")
+        dist_y = abs((height / 2.0) / sin_t) if sin_t != 0 else float("inf")
+
         return min(dist_x, dist_y)
 
     def contains(self, pos: Pos) -> bool:
@@ -187,10 +187,10 @@ class Rectangle(Shape):
         for i in range(n_points):
             theta = 2 * math.pi * i / n_points
             r = self.get_radius(theta)
-            
+
             d_x = r * math.cos(theta)
             d_y = r * math.sin(theta)
-            
+
             points.append((self.cx + d_x, self.cy + d_y))
         return points
 
@@ -200,5 +200,5 @@ class Rectangle(Shape):
             "x_min": self.x_min,
             "y_min": self.y_min,
             "x_max": self.x_max,
-            "y_max": self.y_max
+            "y_max": self.y_max,
         }

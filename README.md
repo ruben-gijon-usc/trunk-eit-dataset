@@ -18,15 +18,15 @@ uv sync                 # Install dependencies
 
 ```
 src/
-├── base.py             # Domain models (Trunk, Anomaly, Pos)
-├── grid.py             # Grid generation (N x N matrices)
-├── eit_simulation.py   # Analytical forward solver
-├── pipeline.py         # Dataset orchestration
-└── eidors/
-    ├── bridge.py       # Python wrapper for EIDORS
-    ├── simulate.m     # Complete EIDORS simulation
-    ├── create_model.m # Create circular FEM model
-    └── forward_solve.m # Run forward solve
+├── models/              # Domain models (Pos, Shape, Anomaly, Trunk)
+├── data_representations/
+│   └── grid.py          # Grid generation (N x N matrices)
+├── simulation/          # Grid generation (legacy, to be consolidated)
+├── eidors/              # EIDORS bridge and Octave scripts
+│   ├── bridge.py        # Python wrapper for EIDORS
+│   └── *.m              # Octave FEM simulation files
+├── pipeline/            # Dataset orchestration
+└── monte-carlo/         # Monte Carlo utilities
 
 tests/
 ├── test_pipeline.py
@@ -80,15 +80,15 @@ run_pipeline('dataset.h5', config, 'hdf5')
 ### Grid Generation (N x N matrices)
 
 ```python
-from src.base import Trunk, Anomaly, Pos
-from src.grid import generate_grid, grid2png
+from src.models import Trunk, Anomaly, Pos, Circle
+from src.simulation.grid import generate_grid, grid2png
 
 # Create trunk model
 trunk = Trunk(
     radius=1.0,
     base_conductivity=0.1,
     anomalies=[
-        Anomaly(radius=0.15, center=Pos(r=0.3, phi=0.0), conductivity=0.5),
+        Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.15), conductivity=0.5),
     ]
 )
 
@@ -103,13 +103,13 @@ grid2png(grid, 'conductivity.png')
 
 ```python
 from src.eidors.bridge import run_eidors_simulation
-from src.base import Trunk, Anomaly, Pos
+from src.models import Trunk, Anomaly, Pos, Circle
 
 trunk = Trunk(
     radius=1.0,
     base_conductivity=1.0,
     anomalies=[
-        Anomaly(radius=0.15, center=Pos(r=0.3, phi=0.0), conductivity=0.5),
+        Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.15), conductivity=0.5),
     ]
 )
 
@@ -121,20 +121,16 @@ print(f"Elements: {result.mesh.elems.shape}")  # (2943, 3)
 print(f"Elem data: {result.elem_data.shape}")  # (2943,)
 ```
 
-### Analytical Forward Solver
+### Analytical Forward Solver (via EIDORS)
 
 ```python
-from src.eit_simulation import eit_simulation, EITProtocol
-from src.grid import generate_grid
-from src.base import Trunk
+from src.eidors.bridge import run_eidors_simulation
+from src.models import Trunk
 
 trunk = Trunk(radius=1.0, base_conductivity=0.1, anomalies=[])
-grid = generate_grid(trunk, resolution=64)
 
-protocol = EITProtocol(num_electrodes=16, injection_method="adjacent")
-voltages = eit_simulation(grid, protocol, trunk_radius=1.0)
-
-print(f"Voltages: {voltages.shape}")  # (1456,)
+result = run_eidors_simulation(trunk, n_electrodes=16)
+print(f"Voltages: {result.voltages.shape}")  # (208,)
 ```
 
 ### Pipeline Configuration

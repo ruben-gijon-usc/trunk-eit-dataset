@@ -16,10 +16,14 @@ from ..models import Trunk
 
 SCRIPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
 
+
 def get_eidors_path() -> str:
     """Get EIDORS path from vendor/ directory or environment."""
     import os
-    vendor_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "vendor", "eidors")
+
+    vendor_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "vendor", "eidors"
+    )
     env_path = os.path.expandvars("$EIDORS_PATH")
     if os.path.exists(vendor_path):
         return vendor_path
@@ -50,13 +54,10 @@ def _anomalies_to_json(trunk: Trunk) -> str:
     for a in trunk.anomalies:
         anomaly_dict = a.to_dict()  # Uses Anomaly.to_dict() which includes shape + conductivity
         anomalies.append(anomaly_dict)
-    return json.dumps(anomalies) if anomalies else '[]'
+    return json.dumps(anomalies) if anomalies else "[]"
 
 
-def run_eidors_simulation(
-    trunk: Trunk,
-    n_electrodes: int = 16
-) -> Optional[EIDORSResult]:
+def run_eidors_simulation(trunk: Trunk, n_electrodes: int = 16) -> Optional[EIDORSResult]:
     """
     Run EIDORS forward simulation.
 
@@ -76,14 +77,14 @@ simulate({n_electrodes}, {trunk.base_conductivity}, '{anomalies_json}', '{tmpdir
 """
 
         script_path = os.path.join(tmpdir, "run.m")
-        with open(script_path, 'w') as f:
+        with open(script_path, "w") as f:
             f.write(script)
 
         result = subprocess.run(
             ["octave", "--no-gui", "--quiet", script_path],
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=300,
         )
 
         if result.returncode != 0:
@@ -101,9 +102,7 @@ simulate({n_electrodes}, {trunk.base_conductivity}, '{anomalies_json}', '{tmpdir
         elem_data = np.loadtxt(os.path.join(tmpdir, "elem_data.txt"))
 
         return EIDORSResult(
-            voltages=voltages,
-            mesh=MeshData(nodes=nodes, elems=elems),
-            elem_data=elem_data
+            voltages=voltages, mesh=MeshData(nodes=nodes, elems=elems), elem_data=elem_data
         )
 
 
@@ -118,14 +117,14 @@ dlmwrite('{tmpdir}/elems.txt', img.fwd_model.elems, ' ');
 """
 
         script_path = os.path.join(tmpdir, "get_mesh.m")
-        with open(script_path, 'w') as f:
+        with open(script_path, "w") as f:
             f.write(script)
 
         result = subprocess.run(
             ["octave", "--no-gui", "--quiet", script_path],
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=120,
         )
 
         nodes_path = os.path.join(tmpdir, "nodes.txt")

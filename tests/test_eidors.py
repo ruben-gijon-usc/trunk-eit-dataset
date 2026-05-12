@@ -7,9 +7,9 @@ import numpy as np
 import sys
 import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.models import Trunk, Anomaly, Circle
+from src.models import Trunk, Anomaly, Circle, Pos
 from src.eidors.bridge import run_eidors_simulation, get_eidors_mesh, EIDORSResult
 
 
@@ -27,11 +27,7 @@ class TestEIDORSBridge:
 
     def test_run_eidors_simulation_homogeneous(self):
         """Test EIDORS with homogeneous trunk (no anomalies)."""
-        trunk = Trunk(
-            radius=1.0,
-            base_conductivity=1.0,
-            anomalies=[]
-        )
+        trunk = Trunk(radius=1.0, base_conductivity=1.0, anomalies=[])
 
         result = run_eidors_simulation(trunk, n_electrodes=16)
 
@@ -47,11 +43,8 @@ class TestEIDORSBridge:
             radius=1.0,
             base_conductivity=1.0,
             anomalies=[
-                Anomaly(
-                    shape=Circle(cx=0.3, cy=0.0, radius=0.15),
-                    conductivity=0.5
-                )
-            ]
+                Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.15), conductivity=0.5)
+            ],
         )
 
         result = run_eidors_simulation(trunk, n_electrodes=16)
@@ -67,9 +60,11 @@ class TestEIDORSBridge:
             radius=1.0,
             base_conductivity=1.0,
             anomalies=[
-                Anomaly(shape=Circle(cx=0.2, cy=0.0, radius=0.1), conductivity=0.3),
-                Anomaly(shape=Circle(cx=0.0, cy=0.4, radius=0.15), conductivity=0.6),
-            ]
+                Anomaly(shape=Circle(center=Pos(r=0.2, phi=0.0), radius=0.1), conductivity=0.3),
+                Anomaly(
+                    shape=Circle(center=Pos(r=0.4, phi=np.pi / 2), radius=0.15), conductivity=0.6
+                ),
+            ],
         )
 
         result = run_eidors_simulation(trunk, n_electrodes=16)

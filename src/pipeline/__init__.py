@@ -8,14 +8,14 @@ from .pipeline import (
     DatasetSample,
     generate_dataset,
     generate_random_trunk,
-    save_dataset
+    save_dataset,
 )
 
 __all__ = [
-    'run_pipeline',
-    'PipelineConfig',
-    'DatasetSample',
-    'generate_dataset',
-    'generate_random_trunk',
-    'save_dataset',
+    "run_pipeline",
+    "PipelineConfig",
+    "DatasetSample",
+    "generate_dataset",
+    "generate_random_trunk",
+    "save_dataset",
 ]

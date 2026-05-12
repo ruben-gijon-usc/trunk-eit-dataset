@@ -13,12 +13,12 @@ from .simulation import generate_grid, grid2png
 from .pipeline import run_pipeline, PipelineConfig, DatasetSample
 
 __all__ = [
-    'Trunk',
-    'Anomaly',
-    'Pos',
-    'generate_grid',
-    'grid2png',
-    'run_pipeline',
-    'PipelineConfig',
-    'DatasetSample',
+    "Trunk",
+    "Anomaly",
+    "Pos",
+    "generate_grid",
+    "grid2png",
+    "run_pipeline",
+    "PipelineConfig",
+    "DatasetSample",
 ]

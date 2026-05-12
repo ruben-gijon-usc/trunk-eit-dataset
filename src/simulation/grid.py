@@ -5,7 +5,7 @@ Grid generation for tree trunk EIT.
 import numpy as np
 from numpy.typing import NDArray
 
-from ..models import Trunk
+from ..models import Trunk, Pos
 
 
 def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
@@ -34,19 +34,17 @@ def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
 
     for anomaly in trunk.anomalies:
         shape = anomaly.shape
-        cx = getattr(shape, 'cx', 0)
-        cy = getattr(shape, 'cy', 0)
-
-        if hasattr(shape, 'contains'):
+        if hasattr(shape, "contains"):
             for i in range(resolution):
                 for j in range(resolution):
-                    px = x[j]
-                    py = y[i]
-                    if shape.contains(px, py):
+                    pos = Pos(r=np.sqrt(x[j] ** 2 + y[i] ** 2), phi=np.arctan2(y[i], x[j]))
+                    if shape.contains(pos):
                         grid[i, j] = anomaly.conductivity
         else:
-            radius = getattr(shape, 'radius', 0.1)
-            dist_sq = (X - cx)**2 + (Y - cy)**2
+            cx = getattr(shape, "cx", 0)
+            cy = getattr(shape, "cy", 0)
+            radius = getattr(shape, "radius", 0.1)
+            dist_sq = (X - cx) ** 2 + (Y - cy) ** 2
             anomaly_mask = dist_sq <= radius**2
             grid[anomaly_mask] = anomaly.conductivity
 
@@ -54,10 +52,7 @@ def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
 
 
 def grid2png(
-    grid: NDArray[np.float64],
-    path: str,
-    vmin: float | None = None,
-    vmax: float | None = None
+    grid: NDArray[np.float64], path: str, vmin: float | None = None, vmax: float | None = None
 ) -> None:
     """
     Save conductivity grid as a PNG image for visualization.
@@ -71,8 +66,8 @@ def grid2png(
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(grid, cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
-    ax.set_title('Conductivity (S/m)')
+    im = ax.imshow(grid, cmap="viridis", origin="lower", vmin=vmin, vmax=vmax)
+    ax.set_title("Conductivity (S/m)")
     fig.colorbar(im, ax=ax)
     fig.savefig(path, dpi=150)
     plt.close(fig)
