@@ -1,6 +1,12 @@
 % Complete EIT simulation script
 % Input: n_electrodes, base_conductivity, anomalies_json
 % Output: Saves nodes, elems, voltages, elem_data to tmpdir
+%
+% Anomaly JSON format:
+%   {
+%     "shape": {"shape_type": "circle", "cx": 0.3, "cy": 0.2, "radius": 0.15, ...},
+%     "conductivity": 0.5
+%   }
 
 function simulate(n_elec, base_cond, anomalies_json, tmpdir)
     if nargin < 2
@@ -37,8 +43,44 @@ function simulate(n_elec, base_cond, anomalies_json, tmpdir)
 
             for j = 1:numel(anomalies)
                 a = anomalies(j);
-                dist = sqrt((cx - a.cx)^2 + (cy - a.cy)^2);
-                if dist <= a.radius
+                shape = a.shape;
+                shape_type = shape.shape_type;
+
+                inside = false;
+
+                % Check based on shape type
+                switch shape_type
+                    case 'circle'
+                        dist = sqrt((cx - shape.cx)^2 + (cy - shape.cy)^2);
+                        inside = dist <= shape.radius;
+
+                    case 'ellipse'
+                        dx = cx - shape.cx;
+                        dy = cy - shape.cy;
+                        cos_r = cos(shape.rotation);
+                        sin_r = sin(shape.rotation);
+                        rx = (dx * cos_r + dy * sin_r) / shape.rx;
+                        ry = (-dx * sin_r + dy * cos_r) / shape.ry;
+                        inside = (rx^2 + ry^2) <= 1;
+
+                    case 'harmonic'
+                        r = sqrt((cx - shape.cx)^2 + (cy - shape.cy)^2);
+                        theta = atan2(cy - shape.cy, cx - shape.cx);
+                        r_shape = shape.base_radius;
+                        for n = 1:shape.n_harmonics
+                            r_shape = r_shape + shape.amplitude * shape.base_radius * sin(n * theta) / n;
+                        end
+                        inside = r <= r_shape;
+
+                    case 'rectangle'
+                        inside = (cx >= shape.x_min && cx <= shape.x_max && ...
+                                  cy >= shape.y_min && cy <= shape.y_max);
+
+                    otherwise
+                        warning(['Unknown shape type: ', shape_type]);
+                end
+
+                if inside
                     elem_data(i) = a.conductivity;
                     break;
                 end

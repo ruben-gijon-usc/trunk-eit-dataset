@@ -17,10 +17,10 @@ from typing import Tuple
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
-from matplotlib.patches import Circle, Polygon
+from matplotlib.patches import Circle as MplCircle, Polygon
 from matplotlib.collections import PolyCollection
 
-from src.models import Trunk, Anomaly, Pos
+from src.models import Trunk, Anomaly, Circle
 from src.eidors.bridge import run_eidors_simulation
 from src.simulation import generate_grid, grid2png
 
@@ -151,7 +151,7 @@ def plot_mesh_visualization(
     n_elec = 16
     elec_pos = get_electrode_positions(n_elec, radius=1.0)
     for i, (x, y) in enumerate(elec_pos):
-        circle = Circle((x, y), 0.06, color='red', alpha=0.7)
+        circle = MplCircle((x, y), 0.06, color='red', alpha=0.7)
         ax3.add_patch(circle)
         ax3.annotate(str(i + 1), (x, y), ha='center', va='center', fontsize=8, color='white', fontweight='bold')
 
@@ -187,7 +187,7 @@ def plot_electrode_voltages(
                  'r-', linewidth=2, alpha=0.7)
 
     for i, (x, y) in enumerate(elec_pos):
-        circle = Circle((x, y), 0.05, color='blue', alpha=0.8)
+        circle = MplCircle((x, y), 0.05, color='blue', alpha=0.8)
         ax1.add_patch(circle)
         ax1.annotate(str(i + 1), (x, y), ha='center', va='center', fontsize=9, color='white')
 
@@ -315,13 +315,11 @@ def main():
         base_conductivity=0.1,
         anomalies=[
             Anomaly(
-                radius=0.15,
-                center=Pos(r=0.3, phi=0.0),
+                shape=Circle(cx=0.3, cy=0.0, radius=0.15),
                 conductivity=0.5
             ),
             Anomaly(
-                radius=0.1,
-                center=Pos(r=-0.2, phi=math.pi/2),
+                shape=Circle(cx=-0.2, cy=0.0, radius=0.1),
                 conductivity=0.8
             )
         ]
@@ -337,12 +335,9 @@ def main():
         "base_conductivity_S_m": trunk.base_conductivity,
         "anomalies": [
             {
-                "radius": a.radius,
-                "center_r": a.center.r,
-                "center_phi": a.center.phi,
-                "center_x": a.center.r * math.cos(a.center.phi),
-                "center_y": a.center.r * math.sin(a.center.phi),
-                "conductivity_S_m": a.conductivity
+                "shape_type": a.shape.shape_type,
+                "conductivity_S_m": a.conductivity,
+                **a.shape.to_dict()
             }
             for a in trunk.anomalies
         ]

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulación de Tronco e Impurezas (Coordenadas Polares y Fourier)</title>
+    <title>Generador Monte Carlo - Tronco e Impurezas</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -14,19 +14,16 @@
             background-color: #f4f6f9;
             color: #2c3e50;
             margin: 0;
-            height: 100vh;
+            min-height: 100vh;
             box-sizing: border-box;
         }
         .controls-container {
             flex: 1;
             min-width: 350px;
-            max-width: 450px;
+            max-width: 400px;
             display: flex;
             flex-direction: column;
             gap: 15px;
-            overflow-y: auto;
-            padding-right: 10px;
-            height: calc(100vh - 40px);
         }
         .panel {
             background: white;
@@ -40,9 +37,6 @@
             color: #34495e;
             border-bottom: 2px solid #3498db;
             padding-bottom: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
         .canvas-container {
             flex: 2;
@@ -62,60 +56,64 @@
             border-radius: 50%;
             box-shadow: inset 0 0 20px rgba(0,0,0,0.03);
         }
-        .slider-group {
-            margin-bottom: 12px;
-            background: #f8fafc;
-            padding: 10px;
-            border-radius: 8px;
-        }
-        .slider-group h4 {
-            margin: 0 0 10px 0;
-            font-size: 0.9em;
-            color: #7f8c8d;
-            text-transform: uppercase;
-        }
-        .slider-row {
+        .form-group {
             display: flex;
             align-items: center;
-            margin-bottom: 6px;
-            font-size: 0.9em;
+            justify-content: space-between;
+            margin-bottom: 15px;
         }
-        .slider-row label {
-            width: 45px;
-            font-weight: 600;
+        .form-group input {
+            width: 60px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            text-align: center;
         }
-        .slider-row input[type="range"] {
-            flex: 1;
-            margin: 0 10px;
-            accent-color: #3498db;
-        }
-        .slider-row span {
-            width: 45px;
-            text-align: right;
-            font-family: 'Courier New', Courier, monospace;
-            background: #eef2f5;
-            padding: 2px 5px;
-            border-radius: 4px;
-        }
-        .warning {
-            color: #e74c3c;
-            font-size: 0.85em;
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
             font-weight: bold;
-            margin-top: 10px;
-            min-height: 20px;
+            cursor: pointer;
+            transition: background 0.3s;
         }
-        .color-indicator {
-            width: 15px;
-            height: 15px;
-            border-radius: 3px;
-            display: inline-block;
+        button:hover {
+            background-color: #2980b9;
+        }
+        #log {
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 0.85em;
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
 
-    <div class="controls-container" id="controls">
-        <!-- Los paneles se generarán dinámicamente con JavaScript -->
+    <div class="controls-container">
+        <div class="panel">
+            <h3>Generador Monte Carlo</h3>
+            <p style="font-size: 0.9em; color: #7f8c8d;">
+                Utiliza muestreo de rechazo para generar anomalías orgánicas (Fourier) que no se auto-intersecten ni salgan del tronco.
+            </p>
+            <div class="form-group">
+                <label for="num_anomalies"><b>Cantidad de impurezas:</b></label>
+                <input type="number" id="num_anomalies" min="1" max="50" value="5">
+            </div>
+            <button onclick="generateTrunk()">Generar Tronco Aleatorio</button>
+        </div>
+        
+        <div id="log">Esperando generación...</div>
     </div>
 
     <div class="canvas-container">
@@ -123,147 +121,169 @@
     </div>
 
     <script>
-        const TRUNK_RADIUS = 0.8; // Radio fijo del tronco en metros
-        const SCALE = 300;        // Píxeles por metro (0.8m = 240px)
-        
-        // Configuración de los parámetros para generar la interfaz automáticamente
-        const paramsConfig = [
-            { id: 'pos_r', label: 'r (Pos)', min: 0, max: 0.8, step: 0.01, group: 'Posición Polar' },
-            { id: 'pos_phi', label: 'φ (°)', min: 0, max: 360, step: 1, group: 'Posición Polar' },
-            { id: 'r0', label: 'R₀', min: 0.05, max: 0.5, step: 0.01, group: 'Radio Base' },
-            { id: 'a1', label: 'a₁', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 1' },
-            { id: 'b1', label: 'b₁', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 1' },
-            { id: 'a2', label: 'a₂', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 2' },
-            { id: 'b2', label: 'b₂', min: -0.15, max: 0.15, step: 0.01, group: 'Armónico 2' },
-            { id: 'a3', label: 'a₃', min: -0.1, max: 0.1, step: 0.01, group: 'Armónico 3' },
-            { id: 'b3', label: 'b₃', min: -0.1, max: 0.1, step: 0.01, group: 'Armónico 3' },
-            { id: 'a4', label: 'a₄', min: -0.05, max: 0.05, step: 0.01, group: 'Armónico 4' },
-            { id: 'b4', label: 'b₄', min: -0.05, max: 0.05, step: 0.01, group: 'Armónico 4' }
-        ];
-
-        // Estado inicial de las impurezas
-        const state = {
-            imp1: { pos_r: 0.3, pos_phi: 45, r0: 0.2, a1: 0, b1: 0, a2: 0.05, b2: 0, a3: 0, b3: 0, a4: 0, b4: 0, color: 'rgba(192, 57, 43, 0.7)', stroke: '#c0392b' },
-            imp2: { pos_r: 0.4, pos_phi: 210, r0: 0.25, a1: 0, b1: 0, a2: -0.05, b2: 0.05, a3: 0.02, b3: -0.02, a4: 0, b4: 0, color: 'rgba(41, 128, 185, 0.7)', stroke: '#2980b9' }
-        };
-
-        function buildUI() {
-            const container = document.getElementById('controls');
-            ['imp1', 'imp2'].forEach((impId, index) => {
-                const title = index === 0 ? 'Impureza 1' : 'Impureza 2';
-                const colorCode = state[impId].color;
-                
-                let html = `<div class="panel">
-                    <h3>
-                        ${title}
-                        <span class="color-indicator" style="background-color: ${state[impId].stroke}"></span>
-                    </h3>`;
-                
-                let currentGroup = '';
-                paramsConfig.forEach(param => {
-                    if (param.group !== currentGroup) {
-                        if (currentGroup !== '') html += `</div>`;
-                        html += `<div class="slider-group"><h4>${param.group}</h4>`;
-                        currentGroup = param.group;
-                    }
-                    const val = state[impId][param.id];
-                    html += `
-                        <div class="slider-row">
-                            <label>${param.label}</label>
-                            <input type="range" id="${impId}_${param.id}" min="${param.min}" max="${param.max}" step="${param.step}" value="${val}">
-                            <span id="val_${impId}_${param.id}">${val.toFixed(2)}</span>
-                        </div>
-                    `;
-                });
-                html += `</div><div id="warning_${impId}" class="warning"></div></div>`;
-                container.innerHTML += html;
-            });
-
-            // Añadir Listeners
-            ['imp1', 'imp2'].forEach(impId => {
-                paramsConfig.forEach(param => {
-                    const input = document.getElementById(`${impId}_${param.id}`);
-                    input.addEventListener('input', (e) => {
-                        const val = parseFloat(e.target.value);
-                        state[impId][param.id] = val;
-                        document.getElementById(`val_${impId}_${param.id}`).innerText = val.toFixed(2);
-                        draw();
-                    });
-                });
-            });
-        }
+        const TRUNK_RADIUS = 0.8; // Metros
+        const SCALE = 300;        // Píxeles por metro
 
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
 
-        function getShapeRadius(theta, imp) {
-            let r = imp.r0;
-            r += imp.a1 * Math.cos(theta) + imp.b1 * Math.sin(theta);
-            r += imp.a2 * Math.cos(2 * theta) + imp.b2 * Math.sin(2 * theta);
-            r += imp.a3 * Math.cos(3 * theta) + imp.b3 * Math.sin(3 * theta);
-            r += imp.a4 * Math.cos(4 * theta) + imp.b4 * Math.sin(4 * theta);
-            return r;
+        let anomalies = [];
+
+        // --- Utilidades Matemáticas ---
+
+        // Transformada de Box-Muller para generar números con distribución Normal (Gaussiana)
+        function randomGauss(mean = 0, stdDev = 1) {
+            let u1 = 1.0 - Math.random(); 
+            let u2 = 1.0 - Math.random(); 
+            let randStdNormal = Math.sqrt(-2.0 * Math.log(u1)) * Math.sin(2.0 * Math.PI * u2);
+            return mean + stdDev * randStdNormal;
+        }
+
+        // --- Lógica de Monte Carlo (Muestreo de Rechazo) ---
+
+        function isValid(imp) {
+            const steps = 100;
+            // Centro de la anomalía relativo al centro del tronco (0,0)
+            const cx = imp.pos_r * Math.cos(imp.pos_phi);
+            const cy = imp.pos_r * Math.sin(imp.pos_phi);
+
+            for (let i = 0; i <= steps; i++) {
+                const theta = (i / steps) * 2 * Math.PI;
+                
+                // Calcular radio r(theta)
+                let r = imp.r0;
+                r += imp.a1 * Math.cos(theta) + imp.b1 * Math.sin(theta);
+                r += imp.a2 * Math.cos(2 * theta) + imp.b2 * Math.sin(2 * theta);
+                r += imp.a3 * Math.cos(3 * theta) + imp.b3 * Math.sin(3 * theta);
+                r += imp.a4 * Math.cos(4 * theta) + imp.b4 * Math.sin(4 * theta);
+
+                // Regla 1: No auto-intersección (Damos 0.01m de margen)
+                if (r <= 0.01) return false;
+
+                // Regla 2: Dentro del tronco
+                const px = cx + r * Math.cos(theta);
+                const py = cy + r * Math.sin(theta);
+                const distToCenter = Math.hypot(px, py); // Distancia real al centro del tronco
+
+                if (distToCenter > TRUNK_RADIUS) return false;
+            }
+            return true;
+        }
+
+        function generateAnomaly() {
+            let attempts = 0;
+            const maxAttempts = 2000;
+
+            while (attempts < maxAttempts) {
+                attempts++;
+                
+                // 1. Posición (Distribución por área: raíz cuadrada del random)
+                let pos_r = TRUNK_RADIUS * Math.sqrt(Math.random());
+                let pos_phi = Math.random() * 2 * Math.PI;
+
+                // 2. Radio Base (Normal, centrado en 15% del radio del tronco)
+                let r0 = Math.max(0.02, randomGauss(TRUNK_RADIUS * 0.15, 0.05));
+
+                // 3. Armónicos (Varianza decayente según la frecuencia k)
+                let a1 = randomGauss(0, (r0 * 0.2) / 1);
+                let b1 = randomGauss(0, (r0 * 0.2) / 1);
+                
+                let a2 = randomGauss(0, (r0 * 0.2) / 2);
+                let b2 = randomGauss(0, (r0 * 0.2) / 2);
+                
+                let a3 = randomGauss(0, (r0 * 0.2) / 3);
+                let b3 = randomGauss(0, (r0 * 0.2) / 3);
+                
+                let a4 = randomGauss(0, (r0 * 0.2) / 4);
+                let b4 = randomGauss(0, (r0 * 0.2) / 4);
+
+                let candidate = { pos_r, pos_phi, r0, a1, b1, a2, b2, a3, b3, a4, b4, attempts };
+
+                // Evaluamos si cumple la física
+                if (isValid(candidate)) {
+                    // Asignar color aleatorio oscuro para contraste
+                    const hue = Math.floor(Math.random() * 360);
+                    candidate.color = `hsla(${hue}, 60%, 40%, 0.75)`;
+                    candidate.stroke = `hsla(${hue}, 70%, 25%, 1)`;
+                    return candidate;
+                }
+            }
+            console.error("Fallo al generar anomalía tras " + maxAttempts + " intentos.");
+            return null;
+        }
+
+        // --- Controladores y Dibujado ---
+
+        function generateTrunk() {
+            const count = parseInt(document.getElementById('num_anomalies').value) || 0;
+            anomalies = [];
+            const logEl = document.getElementById('log');
+            logEl.innerHTML = "Generando...\n";
+
+            let totalAttempts = 0;
+            
+            for (let i = 0; i < count; i++) {
+                const imp = generateAnomaly();
+                if (imp) {
+                    anomalies.push(imp);
+                    totalAttempts += imp.attempts;
+                    logEl.innerHTML += `[Impureza ${i+1}] Aceptada tras ${imp.attempts} iteraciones de rechazo.\n`;
+                    logEl.innerHTML += `  r: ${imp.pos_r.toFixed(2)}m, φ: ${(imp.pos_phi * 180 / Math.PI).toFixed(0)}°, R₀: ${imp.r0.toFixed(3)}m\n`;
+                }
+            }
+            
+            logEl.innerHTML += `\nGeneración completada. Intentos totales M-C: ${totalAttempts}`;
+            draw();
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. Dibujar el Tronco (Fondo)
-            ctx.fillStyle = '#fdf3e7'; // Color madera clara
-            ctx.strokeStyle = '#d4ac7f'; // Borde madera
+            // 1. Dibujar Tronco
+            ctx.fillStyle = '#fdf3e7';
+            ctx.strokeStyle = '#d4ac7f';
             ctx.lineWidth = 4;
             ctx.beginPath();
             ctx.arc(centerX, centerY, TRUNK_RADIUS * SCALE, 0, 2 * Math.PI);
             ctx.fill();
             ctx.stroke();
 
-            // Dibujar cruces centrales como referencia
+            // Referencias
             ctx.strokeStyle = '#e1e8ed';
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(0, centerY); ctx.lineTo(canvas.width, centerY);
             ctx.moveTo(centerX, 0); ctx.lineTo(centerX, canvas.height);
             ctx.stroke();
-            
             ctx.fillStyle = '#95a5a6';
             ctx.beginPath();
             ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
             ctx.fill();
 
             // 2. Dibujar Impurezas
-            ['imp1', 'imp2'].forEach(impId => {
-                const imp = state[impId];
-                const warningEl = document.getElementById(`warning_${impId}`);
-                let isInvalidShape = false;
-                let isOutOfBounds = false;
-
-                // Centro de la impureza en coordenadas cartesianas
-                const phi_rad = imp.pos_phi * (Math.PI / 180);
-                const cx = centerX + imp.pos_r * SCALE * Math.cos(phi_rad);
-                const cy = centerY + imp.pos_r * SCALE * Math.sin(phi_rad);
+            anomalies.forEach(imp => {
+                const cx_canvas = centerX + imp.pos_r * SCALE * Math.cos(imp.pos_phi);
+                const cy_canvas = centerY + imp.pos_r * SCALE * Math.sin(imp.pos_phi);
 
                 const points = [];
                 const steps = 200;
 
                 for (let i = 0; i <= steps; i++) {
                     const theta = (i / steps) * 2 * Math.PI;
-                    const r = getShapeRadius(theta, imp);
                     
-                    if (r <= 0) isInvalidShape = true;
+                    let r = imp.r0;
+                    r += imp.a1 * Math.cos(theta) + imp.b1 * Math.sin(theta);
+                    r += imp.a2 * Math.cos(2 * theta) + imp.b2 * Math.sin(2 * theta);
+                    r += imp.a3 * Math.cos(3 * theta) + imp.b3 * Math.sin(3 * theta);
+                    r += imp.a4 * Math.cos(4 * theta) + imp.b4 * Math.sin(4 * theta);
 
-                    const px = cx + r * SCALE * Math.cos(theta);
-                    const py = cy + r * SCALE * Math.sin(theta);
-                    
-                    // Comprobar si el punto se sale del tronco
-                    const distToCenter = Math.sqrt(Math.pow(px - centerX, 2) + Math.pow(py - centerY, 2));
-                    if (distToCenter > TRUNK_RADIUS * SCALE) isOutOfBounds = true;
-
+                    const px = cx_canvas + r * SCALE * Math.cos(theta);
+                    const py = cy_canvas + r * SCALE * Math.sin(theta);
                     points.push({x: px, y: py});
                 }
 
-                // Renderizar forma
                 ctx.fillStyle = imp.color;
                 ctx.strokeStyle = imp.stroke;
                 ctx.lineWidth = 2;
@@ -277,23 +297,16 @@
                 ctx.fill();
                 ctx.stroke();
 
-                // Dibujar el centro polar de la impureza
+                // Centro de la impureza
                 ctx.fillStyle = imp.stroke;
                 ctx.beginPath();
-                ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
+                ctx.arc(cx_canvas, cy_canvas, 2, 0, 2 * Math.PI);
                 ctx.fill();
-
-                // Actualizar advertencias
-                let warnings = [];
-                if (isInvalidShape) warnings.push("⚠️ Auto-intersección (R < 0)");
-                if (isOutOfBounds) warnings.push("⚠️ Fuera del límite del tronco");
-                warningEl.innerHTML = warnings.join("<br>");
             });
         }
 
-        // Inicializar
-        buildUI();
-        draw();
+        // Generar uno por defecto al cargar
+        generateTrunk();
     </script>
 </body>
 </html>

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from ..models import Anomaly, Pos, Trunk
+from ..models import Anomaly, Circle, Pos, Trunk
 from ..eidors.bridge import run_eidors_simulation
 from ..simulation import generate_grid
 
@@ -62,9 +62,11 @@ def generate_random_trunk(config: PipelineConfig) -> Trunk:
             config.anomaly_conductivity_range[1]
         )
 
+        cx = center_r * np.cos(center_phi)
+        cy = center_r * np.sin(center_phi)
+
         anomalies.append(Anomaly(
-            radius=anomaly_radius,
-            center=Pos(r=center_r, phi=center_phi),
+            shape=Circle(cx=cx, cy=cy, radius=anomaly_radius),
             conductivity=conductivity
         ))
 

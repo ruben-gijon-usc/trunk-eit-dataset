@@ -9,7 +9,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.models import Trunk, Anomaly, Pos
+from src.models import Trunk, Anomaly, Circle
 from src.eidors.bridge import run_eidors_simulation, get_eidors_mesh, EIDORSResult
 
 
@@ -48,8 +48,7 @@ class TestEIDORSBridge:
             base_conductivity=1.0,
             anomalies=[
                 Anomaly(
-                    radius=0.15,
-                    center=Pos(r=0.3, phi=0.0),
+                    shape=Circle(cx=0.3, cy=0.0, radius=0.15),
                     conductivity=0.5
                 )
             ]
@@ -68,8 +67,8 @@ class TestEIDORSBridge:
             radius=1.0,
             base_conductivity=1.0,
             anomalies=[
-                Anomaly(radius=0.1, center=Pos(r=0.2, phi=0.0), conductivity=0.3),
-                Anomaly(radius=0.15, center=Pos(r=0.4, phi=np.pi/2), conductivity=0.6),
+                Anomaly(shape=Circle(cx=0.2, cy=0.0, radius=0.1), conductivity=0.3),
+                Anomaly(shape=Circle(cx=0.0, cy=0.4, radius=0.15), conductivity=0.6),
             ]
         )
 

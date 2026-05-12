@@ -48,12 +48,8 @@ def _anomalies_to_json(trunk: Trunk) -> str:
     """Convert trunk anomalies to JSON string for Octave."""
     anomalies = []
     for a in trunk.anomalies:
-        anomalies.append({
-            'cx': a.center.r * np.cos(a.center.phi),
-            'cy': a.center.r * np.sin(a.center.phi),
-            'radius': a.radius,
-            'conductivity': a.conductivity
-        })
+        anomaly_dict = a.to_dict()  # Uses Anomaly.to_dict() which includes shape + conductivity
+        anomalies.append(anomaly_dict)
     return json.dumps(anomalies) if anomalies else '[]'
 
 

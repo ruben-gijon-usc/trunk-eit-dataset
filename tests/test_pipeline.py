@@ -9,7 +9,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.models import Trunk, Anomaly, Pos
+from src.models import Trunk, Anomaly, Circle, Pos
 from src.simulation import generate_grid, grid2png
 from src.pipeline import (
     generate_random_trunk,
@@ -37,7 +37,7 @@ class TestGrid:
             radius=1.0,
             base_conductivity=0.1,
             anomalies=[
-                Anomaly(radius=0.2, center=Pos(r=0.3, phi=0.0), conductivity=0.5)
+                Anomaly(shape=Circle(cx=0.3, cy=0.0, radius=0.2), conductivity=0.5)
             ]
         )
         grid = generate_grid(trunk, resolution=64)
@@ -101,11 +101,10 @@ class TestBaseModels:
     def test_anomaly_creation(self):
         """Test Anomaly creation."""
         anomaly = Anomaly(
-            radius=0.2,
-            center=Pos(r=0.3, phi=0.0),
+            shape=Circle(cx=0.3, cy=0.0, radius=0.2),
             conductivity=0.5
         )
-        assert anomaly.radius == 0.2
+        assert anomaly.shape.radius == 0.2
         assert anomaly.conductivity == 0.5
 
     def test_trunk_creation(self):
@@ -114,7 +113,7 @@ class TestBaseModels:
             radius=1.0,
             base_conductivity=0.1,
             anomalies=[
-                Anomaly(radius=0.2, center=Pos(r=0.3, phi=0.0), conductivity=0.5)
+                Anomaly(shape=Circle(cx=0.3, cy=0.0, radius=0.2), conductivity=0.5)
             ]
         )
         assert trunk.radius == 1.0

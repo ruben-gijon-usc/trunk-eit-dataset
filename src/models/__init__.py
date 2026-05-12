@@ -2,6 +2,18 @@
 Domain models for tree trunk EIT.
 """
 
-from .base import Trunk, Anomaly, Pos
+from .pos import Pos
+from .shape import Shape, Circle, Ellipse, Harmonic, Rectangle
+from .anomaly import Anomaly
+from .trunk import Trunk
 
-__all__ = ['Trunk', 'Anomaly', 'Pos']
+__all__ = [
+    'Pos',
+    'Shape',
+    'Circle',
+    'Ellipse',
+    'Harmonic',
+    'Rectangle',
+    'Anomaly',
+    'Trunk',
+]
