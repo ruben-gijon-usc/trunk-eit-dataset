@@ -8,4 +8,7 @@ class Anomaly:
 
     def to_dict(self) -> dict:
         """Serialize to dictionary for JSON."""
-        return {"shape": self.shape.to_dict(), "conductivity": self.conductivity}
+        return {
+            "shape": self.shape.to_dict(), 
+            "conductivity": self.conductivity
+        }

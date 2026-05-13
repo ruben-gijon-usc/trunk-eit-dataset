@@ -18,15 +18,16 @@ uv sync                 # Install dependencies
 
 ```
 src/
-├── models/              # Domain models (Pos, Shape, Anomaly, Trunk)
-├── data_representations/
-│   └── grid.py          # Grid generation (N x N matrices)
-├── simulation/          # Grid generation (legacy, to be consolidated)
-├── eidors/              # EIDORS bridge and Octave scripts
-│   ├── bridge.py        # Python wrapper for EIDORS
-│   └── *.m              # Octave FEM simulation files
-├── pipeline/            # Dataset orchestration
-└── monte-carlo/         # Monte Carlo utilities
+├── models/                    # Domain models (Pos, Shape, Anomaly, Trunk)
+├── data_representations/      # Grid generation (N x N matrices)
+│   └── grid.py
+├── simulation/                # Simulation re-exports (backward compat)
+│   └── grid.py -> data_representations.grid
+├── eidors/                   # EIDORS bridge and Octave scripts
+│   ├── bridge.py
+│   └── scripts/*.m
+├── pipeline/                 # Dataset orchestration
+└── monte-carlo/              # Monte Carlo utilities
 
 tests/
 ├── test_pipeline.py

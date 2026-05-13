@@ -24,6 +24,7 @@ The project strictly separates geometric abstractions from numerical representat
 - **Role**: Translates domain models into discrete representations for ML and simulation.
 - **Implementation**: `generate_grid(trunk: Trunk, resolution: int) -> np.ndarray`.
 - **Rule**: Use vectorized `numpy` operations (e.g., boolean masks for circles) to generate 2D arrays. Avoid `for` loops for pixel-level operations.
+- **Note**: `src/simulation/grid.py` re-exports from here for backward compatibility.
 
 ### 3. `src/eidors/bridge.py` + `src/simulation/` (Forward Problem)
 - **Role**: Solves the EIT forward problem.

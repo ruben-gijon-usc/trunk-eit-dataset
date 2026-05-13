@@ -164,19 +164,6 @@ class Rectangle(Shape):
         self.cx = (x_min + x_max) / 2.0
         self.cy = (y_min + y_max) / 2.0
 
-    def get_radius(self, theta: float) -> float:
-        """Calculate distance from center to bounding box at given angle."""
-        width = self.x_max - self.x_min
-        height = self.y_max - self.y_min
-        cos_t = math.cos(theta)
-        sin_t = math.sin(theta)
-
-        # Ray-box intersection logic to find radius
-        dist_x = abs((width / 2.0) / cos_t) if cos_t != 0 else float("inf")
-        dist_y = abs((height / 2.0) / sin_t) if sin_t != 0 else float("inf")
-
-        return min(dist_x, dist_y)
-
     def contains(self, pos: Pos) -> bool:
         x, y = pos.to_cartesian()
         return self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max
