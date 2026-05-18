@@ -41,14 +41,27 @@ class CircularShape(Shape):
         """Get radius on a certain direction (theta in radians)."""
         pass
 
-    def contains(self, pos: Pos) -> bool:
-        """Check if a position is inside the shape using polar coordinates."""
+    def get_relative_pos(self, pos: Pos) -> Pos:
+        """Get radius on a certain direction (theta in radians)."""
         x, y = pos.to_cartesian()
         dx = x - self.cx
         dy = y - self.cy
         r = math.sqrt(dx**2 + dy**2)
         theta = math.atan2(dy, dx)
-        return r <= self.get_radius(theta)
+        return Pos(r=r, phi=theta)
+    
+    def get_relative_radius(self, pos: Pos) -> float:
+        """Returns relative radius. 
+            If 0 <= r < 1: is contained on shape. 
+            if r > 1: is outside shape"""
+        pos_rel = self.get_relative_pos(pos)
+        theta = pos_rel.phi
+        return pos_rel.r / self.get_radius(theta)
+
+    def contains(self, pos: Pos) -> bool:
+        """Check if a position is inside the shape using polar coordinates."""
+        pos_rel = self.get_relative_pos(pos)
+        return pos_rel.r <= self.get_radius(pos_rel.phi)
 
     def get_points(self, n_points: int) -> list[tuple[float, float]]:
         """Generate boundary points based on the radius at different angles."""
@@ -170,15 +183,11 @@ class Rectangle(Shape):
 
     def get_points(self, n_points: int) -> list[tuple[float, float]]:
         """Generate boundary points for the rectangle."""
-        points = []
-        for i in range(n_points):
-            theta = 2 * math.pi * i / n_points
-            r = self.get_radius(theta)
-
-            d_x = r * math.cos(theta)
-            d_y = r * math.sin(theta)
-
-            points.append((self.cx + d_x, self.cy + d_y))
+        points = [
+            (x, y)
+            for x in (self.x_min, self.x_max)
+            for y in (self.y_min, self.y_max)            
+        ]
         return points
 
     def to_dict(self) -> dict:
