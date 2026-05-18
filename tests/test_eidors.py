@@ -2,15 +2,16 @@
 Tests for EIDORS integration.
 """
 
-import pytest
-import numpy as np
-import sys
 import os
+import sys
+
+import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.models import Trunk, Anomaly, Circle, Pos
-from src.eidors.bridge import run_eidors_simulation, get_eidors_mesh, EIDORSResult
+from src.eidors.bridge import EIDORSResult, get_eidors_mesh, run_eidors_simulation
+from src.models import Anomaly, Circle, Pos, Trunk
 
 
 class TestEIDORSBridge:

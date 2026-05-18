@@ -2,17 +2,16 @@
 EIDORS Bridge - Python interface to EIDORS via Octave.
 """
 
-import os
-import tempfile
-import subprocess
 import json
+import os
+import subprocess
+import tempfile
 from dataclasses import dataclass
-from typing import Optional, List
+
 import numpy as np
 from numpy.typing import NDArray
 
 from ..models import Trunk
-
 
 SCRIPT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
 
@@ -57,7 +56,7 @@ def _anomalies_to_json(trunk: Trunk) -> str:
     return json.dumps(anomalies) if anomalies else "[]"
 
 
-def run_eidors_simulation(trunk: Trunk, n_electrodes: int = 16) -> Optional[EIDORSResult]:
+def run_eidors_simulation(trunk: Trunk, n_electrodes: int = 16) -> EIDORSResult | None:
     """
     Run EIDORS forward simulation.
 
@@ -93,7 +92,7 @@ simulate({n_electrodes}, {trunk.base_conductivity}, '{anomalies_json}', '{tmpdir
 
         nodes_path = os.path.join(tmpdir, "nodes.txt")
         if not os.path.exists(nodes_path):
-            print(f"Output files not created")
+            print("Output files not created")
             return None
 
         nodes = np.loadtxt(nodes_path)
@@ -106,7 +105,7 @@ simulate({n_electrodes}, {trunk.base_conductivity}, '{anomalies_json}', '{tmpdir
         )
 
 
-def get_eidors_mesh(n_electrodes: int = 16) -> Optional[MeshData]:
+def get_eidors_mesh(n_electrodes: int = 16) -> MeshData | None:
     """Get mesh from EIDORS model."""
     with tempfile.TemporaryDirectory() as tmpdir:
         script = f"""

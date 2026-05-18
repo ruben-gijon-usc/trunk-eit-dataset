@@ -5,6 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class Pos:
     """Polar position coordinates."""
+
     r: float = 0.0  # m
     phi: float = 0.0  # radians
 

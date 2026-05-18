@@ -8,9 +8,9 @@ Structure:
 - pipeline: Dataset orchestration (run_pipeline, PipelineConfig)
 """
 
-from .models import Trunk, Anomaly, Pos
+from .models import Anomaly, Pos, Trunk
+from .pipeline import DatasetSample, PipelineConfig, run_pipeline
 from .simulation import generate_grid, grid2png
-from .pipeline import run_pipeline, PipelineConfig, DatasetSample
 
 __all__ = [
     "Trunk",

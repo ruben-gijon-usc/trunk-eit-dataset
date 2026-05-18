@@ -3,8 +3,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from ..models import Anomaly, Circle, Pos, Trunk
 from ..eidors.bridge import run_eidors_simulation
+from ..models import Anomaly, Circle, Pos, Trunk
 from ..simulation import generate_grid
 
 

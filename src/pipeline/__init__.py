@@ -3,11 +3,11 @@ Dataset generation pipeline.
 """
 
 from .pipeline import (
-    run_pipeline,
-    PipelineConfig,
     DatasetSample,
+    PipelineConfig,
     generate_dataset,
     generate_random_trunk,
+    run_pipeline,
     save_dataset,
 )
 

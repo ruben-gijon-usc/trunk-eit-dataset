@@ -5,7 +5,7 @@ Grid generation for tree trunk EIT.
 import numpy as np
 from numpy.typing import NDArray
 
-from ..models import Trunk, Pos
+from ..models import Trunk
 
 
 def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:

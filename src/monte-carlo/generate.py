@@ -1,7 +1,7 @@
 import math as m
 import random
-from typing import List, Tuple
-from ..models import Trunk, HarmonicAnomaly, Pos
+
+from ..models import HarmonicAnomaly, Pos, Trunk
 
 
 class RandomTreeFactory:
@@ -35,7 +35,7 @@ class RandomTreeFactory:
         if max_radius is not None and isinstance(max_radius, float):
             r0 = max(r0, max_radius)
 
-        harmonics: List[Tuple[float, float]] = []
+        harmonics: list[tuple[float, float]] = []
         for k in range(1, harmonic_degree + 1):
             sigma = (r0 * harmonic_sigma) / k
             a, b = self.get_random_gaussian(0, sigma), self.get_random_gaussian(0, sigma)

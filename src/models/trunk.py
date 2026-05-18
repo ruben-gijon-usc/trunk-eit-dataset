@@ -25,9 +25,7 @@ class Trunk:
         if pos.r > self.radius:
             return 0
         all_conductivities = [
-            anomaly.conductivity
-            for anomaly in self.anomalies
-            if anomaly.contains(pos)
+            anomaly.conductivity for anomaly in self.anomalies if anomaly.contains(pos)
         ]
         if not all_conductivities:
             return self.base_conductivity
