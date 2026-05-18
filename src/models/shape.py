@@ -49,11 +49,11 @@ class CircularShape(Shape):
         r = math.sqrt(dx**2 + dy**2)
         theta = math.atan2(dy, dx)
         return Pos(r=r, phi=theta)
-    
+
     def get_relative_radius(self, pos: Pos) -> float:
-        """Returns relative radius. 
-            If 0 <= r < 1: is contained on shape. 
-            if r > 1: is outside shape"""
+        """Returns relative radius.
+        If 0 <= r < 1: is contained on shape.
+        if r > 1: is outside shape"""
         pos_rel = self.get_relative_pos(pos)
         theta = pos_rel.phi
         return pos_rel.r / self.get_radius(theta)
@@ -183,11 +183,7 @@ class Rectangle(Shape):
 
     def get_points(self, n_points: int) -> list[tuple[float, float]]:
         """Generate boundary points for the rectangle."""
-        points = [
-            (x, y)
-            for x in (self.x_min, self.x_max)
-            for y in (self.y_min, self.y_max)            
-        ]
+        points = [(x, y) for x in (self.x_min, self.x_max) for y in (self.y_min, self.y_max)]
         return points
 
     def to_dict(self) -> dict:
