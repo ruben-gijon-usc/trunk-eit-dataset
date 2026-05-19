@@ -1,36 +1,57 @@
-from dataclasses import dataclass, field
 from typing import Literal
 
 from .anomaly import Anomaly
+from .base import Serializable
 from .pos import Pos
+from .shape import Circle
 
 
-@dataclass
-class Trunk:
-    """Tree trunk with base properties and anomalies."""
+class Trunk(Serializable):
+    def __init__(self, trunk: Anomaly, anomalies: list[Anomaly]):
+        self.trunk = trunk
+        self.anomalies = anomalies
 
-    radius: float
-    base_conductivity: float
-    anomalies: list[Anomaly] = field(default_factory=list)
+    @classmethod
+    def from_dict(cls, data: dict) -> "Trunk":
+        trunk_data = data.get("trunk")
+        trunk = Anomaly.from_dict(trunk_data)
+
+        anomalies_data = data.get("anomalies")
+        anomalies = [Anomaly.from_dict(a_data) for a_data in anomalies_data]
+        return Trunk(
+            trunk=trunk,
+            anomalies=anomalies
+        )
 
     def to_dict(self) -> dict:
-        """Serialize to dictionary for JSON."""
         return {
-            "radius": self.radius,
-            "base_conductivity": self.base_conductivity,
-            "anomalies": [a.to_dict() for a in self.anomalies],
+            "trunk": self.trunk.to_dict(),
+            "anomalies": [a.to_dict() for a in self.anomalies]
         }
 
-    def get_conductivity(self, pos: Pos, mode: Literal["Sum", "Max"] = "Max") -> float:
-        if pos.r > self.radius:
-            return 0
+    def get_conductivity(self, pos: Pos, mode: Literal["Sum", "Max"] = "Max", add_base_cond: bool = False) -> float:
+        if not self.trunk.contains(pos):
+            return 0.
         all_conductivities = [
-            anomaly.conductivity for anomaly in self.anomalies if anomaly.contains(pos)
+            a.get_conductivity(pos) for a in self.anomalies if a.contains(pos)
         ]
+
         if not all_conductivities:
-            return self.base_conductivity
+            return self.trunk.get_conductivity(pos)
+
+        base_conductivity = self.trunk.get_conductivity(pos) if add_base_cond else 0.
         if mode == "Sum":
-            return sum(all_conductivities)
+            return sum(all_conductivities) + base_conductivity
         if mode == "Max":
-            return max(all_conductivities)
-        raise ValueError(f"Unknown mode: {mode}")
+            return max(all_conductivities) + base_conductivity
+        raise NotImplementedError(f"Unknown mode: {mode}")
+
+
+class SimpleTrunk:
+    """Factory class to generate simple circular trunks."""
+
+    @classmethod
+    def create(cls, radius: float, base_conductivity: float, anomalies: list[Anomaly] = None) -> Trunk:
+        shape = Circle(Pos(0, 0), radius)
+        trunk = Anomaly(shape, base_conductivity, "Constant")
+        return Trunk(trunk=trunk, anomalies=anomalies if anomalies else [])

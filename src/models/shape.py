@@ -1,40 +1,23 @@
 import math
 from abc import ABC, abstractmethod
+from typing import Any
 
+from .base import Serializable
 from .pos import Pos
 
 
-class Shape(ABC):
+class Shape(ABC, Serializable):
     """Abstract base class for geometric shapes."""
 
     SHAPE_TYPE: str = ""
 
-    @abstractmethod
-    def contains(self, pos: Pos) -> bool:
-        """Check if a position is inside the shape."""
-        pass
-
-    @abstractmethod
-    def to_dict(self) -> dict:
-        """Serialize to dictionary for JSON."""
-        pass
-
-    @abstractmethod
-    def get_points(self, n_points: int) -> list[tuple[float, float]]:
-        """Generate boundary points for the shape."""
-        pass
+    def __init__(self, center: Pos):
+        self.center = center
 
     @property
     def shape_type(self) -> str:
         """Return shape type identifier."""
         return self.SHAPE_TYPE
-
-
-class CircularShape(Shape):
-    """Abstract base class for polar/circular-based shapes."""
-
-    def __init__(self, center: Pos):
-        self.cx, self.cy = center.to_cartesian()
 
     @abstractmethod
     def get_radius(self, theta: float) -> float:
@@ -42,13 +25,11 @@ class CircularShape(Shape):
         pass
 
     def get_relative_pos(self, pos: Pos) -> Pos:
-        """Get radius on a certain direction (theta in radians)."""
-        x, y = pos.to_cartesian()
-        dx = x - self.cx
-        dy = y - self.cy
-        r = math.sqrt(dx**2 + dy**2)
-        theta = math.atan2(dy, dx)
-        return Pos(r=r, phi=theta)
+        """Calculate the position relative to the shape's center in polar coordinates."""
+        cx, cy = self.center.to_cartesian()
+        dx = pos.x - cx
+        dy = pos.y - cy
+        return Pos.from_cartesian(dx, dy)
 
     def get_relative_radius(self, pos: Pos) -> float:
         """Returns relative radius.
@@ -65,21 +46,21 @@ class CircularShape(Shape):
 
     def get_points(self, n_points: int) -> list[tuple[float, float]]:
         """Generate boundary points based on the radius at different angles."""
+        cx, cy = self.center.to_cartesian()
+
         points = []
         for i in range(n_points):
-            # Calculate angle evenly distributed across 2*PI
             theta = 2 * math.pi * i / n_points
             r = self.get_radius(theta)
 
-            # Convert polar to cartesian offsets
             d_x = r * math.cos(theta)
             d_y = r * math.sin(theta)
 
-            points.append((self.cx + d_x, self.cy + d_y))
+            points.append((cx + d_x, cy + d_y))
         return points
 
 
-class Circle(CircularShape):
+class Circle(Shape):
     """Circle shape."""
 
     SHAPE_TYPE = "circle"
@@ -88,14 +69,25 @@ class Circle(CircularShape):
         super().__init__(center)
         self.radius = radius
 
+    @classmethod
+    def from_dict(cls, data):
+        center_data, radius = data.get("center"), data.get("radius")
+        if center_data is None or radius is None:
+            raise ValueError("Missing required keys for Circle: 'cx', 'cy', or 'radius'")
+        center = Pos.from_dict(center_data)
+        return Circle(center, radius)
+
     def get_radius(self, theta: float) -> float:
         return self.radius
 
     def to_dict(self) -> dict:
-        return {"shape_type": self.shape_type, "cx": self.cx, "cy": self.cy, "radius": self.radius}
+        return {"shape_type": self.shape_type, "center": self.center.to_dict(), "radius": self.radius}
+
+    def get_area(self) -> float:
+        return math.pi * self.radius * self.radius
 
 
-class Ellipse(CircularShape):
+class Ellipse(Shape):
     """Ellipse shape with rotation."""
 
     SHAPE_TYPE = "ellipse"
@@ -106,13 +98,19 @@ class Ellipse(CircularShape):
         self.ry = ry
         self.rotation = rotation
 
+    @classmethod
+    def from_dict(cls, data):
+        center_data, rx, ry, rotation = data.get("center"), data.get("rx"), data.get("ry"), data.get("rotation")
+        if center_data is None or rx is None or ry is None or rotation is None:
+            raise ValueError("Missing required keys for Ellipse: 'cx', 'cy', 'rx', 'ry', 'rotation'")
+        center = Pos.from_dict(center_data)
+        return Ellipse(center, rx, ry, rotation)
+
     def get_radius(self, theta: float) -> float:
-        # Calculate radius considering the ellipse's rotation
         alpha = theta - self.rotation
         cos_a = math.cos(alpha)
         sin_a = math.sin(alpha)
 
-        # Prevent division by zero mathematically
         denom = math.sqrt((self.ry * cos_a) ** 2 + (self.rx * sin_a) ** 2)
         if denom == 0:
             return 0.0
@@ -121,15 +119,17 @@ class Ellipse(CircularShape):
     def to_dict(self) -> dict:
         return {
             "shape_type": self.shape_type,
-            "cx": self.cx,
-            "cy": self.cy,
+            "center": self.center.to_dict(),
             "rx": self.rx,
             "ry": self.ry,
             "rotation": self.rotation,
         }
 
+    def get_area(self) -> float:
+        return math.pi * self.rx * self.ry
 
-class Harmonic(CircularShape):
+
+class Harmonic(Shape):
     """
     Harmonic shape - circle with boundary variations based on Fourier series.
     Useful for organic shapes like natural wood anomalies.
@@ -143,54 +143,62 @@ class Harmonic(CircularShape):
         self.base_radius = base_radius
         self.harmonics = harmonics
 
+    @classmethod
+    def from_dict(cls, data):
+        center_data, base_radius, harmonics = data.get("center"), data.get("base_radius"), data.get("harmonics")
+        if center_data is None or base_radius is None or harmonics is None:
+            raise ValueError("Missing required keys for Harmonic: 'cx', 'cy', 'base_radius', 'harmonics'")
+        center = Pos.from_dict(center_data)
+        return Harmonic(center, base_radius, harmonics)
+
     def get_radius(self, theta: float) -> float:
         """Calculate radius at given angle with harmonic perturbations."""
-        r = self.base_radius
-        for n, (a, b) in enumerate(self.harmonics, start=1):
-            r += a * math.cos(n * theta) + b * math.sin(n * theta)
-        return r
+        perturbation = sum(
+            a * math.cos(n * theta) + b * math.sin(n * theta)
+            for n, (a, b) in enumerate(self.harmonics, start=1)
+        )
+        return self.base_radius + perturbation
 
     def to_dict(self) -> dict:
         return {
             "shape_type": self.shape_type,
-            "cx": self.cx,
-            "cy": self.cy,
+            "center": self.center.to_dict(),
             "base_radius": self.base_radius,
             "harmonics": self.harmonics,
         }
 
-    def is_valid(self) -> bool:
-        pass
+    def is_valid(self, n_points: int = 360) -> bool:
+        for i in range(n_points):
+            theta = 2 * math.pi * i / n_points
+            if self.get_radius(theta) <= 0.0:
+                return False
+        return True
+
+    def get_area(self) -> float:
+        base_area = math.pi * (self.base_radius ** 2)
+
+        harmonic_area = (math.pi / 2.0) * sum(
+            a**2 + b**2 for a, b in self.harmonics
+        )
+
+        return base_area + harmonic_area
 
 
-class Rectangle(Shape):
-    """Axis-aligned rectangle."""
+class ShapeFactory:
+    SHAPES: dict[str, type[Shape]] = {
+        Circle.SHAPE_TYPE: Circle,
+        Ellipse.SHAPE_TYPE: Ellipse,
+        Harmonic.SHAPE_TYPE: Harmonic,
+    }
 
-    SHAPE_TYPE = "rectangle"
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Shape":
+        shape_type_str = data.get("shape_type")
+        if shape_type_str is None:
+            raise ValueError("")
 
-    def __init__(self, x_min: float, y_min: float, x_max: float, y_max: float):
-        self.x_min = x_min
-        self.y_min = y_min
-        self.x_max = x_max
-        self.y_max = y_max
-        # Derive center variables for the base class get_points() method
-        self.cx = (x_min + x_max) / 2.0
-        self.cy = (y_min + y_max) / 2.0
+        if shape_type_str in cls.SHAPES:
+            shape_type = cls.SHAPES.get(shape_type_str)
+            return shape_type.from_dict(data)
 
-    def contains(self, pos: Pos) -> bool:
-        x, y = pos.to_cartesian()
-        return self.x_min <= x <= self.x_max and self.y_min <= y <= self.y_max
-
-    def get_points(self, n_points: int) -> list[tuple[float, float]]:
-        """Generate boundary points for the rectangle."""
-        points = [(x, y) for x in (self.x_min, self.x_max) for y in (self.y_min, self.y_max)]
-        return points
-
-    def to_dict(self) -> dict:
-        return {
-            "shape_type": self.shape_type,
-            "x_min": self.x_min,
-            "y_min": self.y_min,
-            "x_max": self.x_max,
-            "y_max": self.y_max,
-        }
+        raise NotImplementedError("")

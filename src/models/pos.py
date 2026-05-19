@@ -1,13 +1,25 @@
 import math
 from dataclasses import dataclass
 
+from .base import Serializable
+
 
 @dataclass
-class Pos:
+class Pos(Serializable):
     """Polar position coordinates."""
 
     r: float = 0.0  # m
     phi: float = 0.0  # radians
+
+    def to_dict(self):
+        return {"r": self.r, "phi": self.phi}
+
+    @classmethod
+    def from_dict(cls, data):
+        r, phi = data.get("r"), data.get("phi")
+        if r is None or phi is None:
+            raise ValueError("")
+        return Pos(r=r, phi=phi)
 
     @classmethod
     def from_cartesian(cls, x: float, y: float) -> "Pos":
