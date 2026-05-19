@@ -5,8 +5,7 @@ Grid generation for tree trunk EIT.
 import numpy as np
 from numpy.typing import NDArray
 
-from ..models import Trunk
-from ..models import Pos
+from ..models import Pos, Trunk
 
 
 def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
@@ -22,16 +21,16 @@ def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
         2D numpy array of shape (ny, nx) containing conductivity values.
     """
     x_min, x_max, y_min, y_max = trunk.get_bounds()
-    
+
     width = x_max - x_min
     height = y_max - y_min
-    
+
     if width > height:
         nx = resolution
         ny = max(1, int(resolution * (height / width)))
     else:
-        ny = resolution
         nx = max(1, int(resolution * (width / height)))
+        ny = resolution
 
     x = np.linspace(x_min, x_max, nx)
     y = np.linspace(y_min, y_max, ny)

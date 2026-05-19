@@ -1,12 +1,12 @@
 import math
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any
 
 from .base import Serializable
 from .pos import Pos
 
 
-class Shape(ABC, Serializable):
+class Shape(Serializable):
     """Abstract base class for geometric shapes."""
 
     SHAPE_TYPE: str = ""
@@ -63,8 +63,12 @@ class Shape(ABC, Serializable):
         points = self.get_points(n_points)
         xs = [p[0] for p in points]
         ys = [p[1] for p in points]
-        
+
         return min(xs), max(xs), min(ys), max(ys)
+
+    @abstractmethod
+    def get_area(self) -> float:
+        pass
 
 
 class Circle(Shape):
@@ -96,9 +100,9 @@ class Circle(Shape):
     def get_bounds(self, n_points: int = None) -> tuple[float, float, float, float]:
         cx, cy = self.center.to_cartesian()
         return (
-            cx - self.radius, 
-            cx + self.radius, 
-            cy - self.radius, 
+            cx - self.radius,
+            cx + self.radius,
+            cy - self.radius,
             cy + self.radius
         )
 
@@ -142,13 +146,13 @@ class Ellipse(Shape):
 
     def get_area(self) -> float:
         return math.pi * self.rx * self.ry
-    
+
     def get_bounds(self, n_points: int = None) -> tuple[float, float, float, float]:
         cx, cy = self.center.to_cartesian()
-        
+
         dx = math.sqrt((self.rx * math.cos(self.rotation))**2 + (self.ry * math.sin(self.rotation))**2)
         dy = math.sqrt((self.rx * math.sin(self.rotation))**2 + (self.ry * math.cos(self.rotation))**2)
-        
+
         return cx - dx, cx + dx, cy - dy, cy + dy
 
 

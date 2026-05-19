@@ -45,7 +45,7 @@ class Trunk(Serializable):
         if mode == "Max":
             return max(all_conductivities) + base_conductivity
         raise NotImplementedError(f"Unknown mode: {mode}")
-    
+
     def get_bounds(self, n_points: int = 360) -> tuple[float, float, float, float]:
         return self.base.shape.get_bounds(n_points)
 
