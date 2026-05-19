@@ -6,39 +6,43 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..models import Trunk
+from ..models import Pos
 
 
 def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
     """
-    Generate a 2D conductivity grid from a Trunk domain model.
-
-    Uses vectorized numpy operations to efficiently rasterize the trunk
-    cross-section and its anomalies onto a uniform grid.
+    Generate a 2D conductivity grid from a Trunk domain model, 
+    strictly respecting the physical aspect ratio.
 
     Args:
         trunk: Domain model containing trunk geometry and anomalies.
-        resolution: Number of pixels along each axis (default 128).
+        resolution: Number of pixels along the longest axis (default 128).
 
     Returns:
-        2D numpy array of shape (resolution, resolution) containing
-        conductivity values in S/m.
+        2D numpy array of shape (ny, nx) containing conductivity values.
     """
-    x = np.linspace(-trunk.radius, trunk.radius, resolution)
-    y = np.linspace(-trunk.radius, trunk.radius, resolution)
+    x_min, x_max, y_min, y_max = trunk.get_bounds()
+    
+    width = x_max - x_min
+    height = y_max - y_min
+    
+    if width > height:
+        nx = resolution
+        ny = max(1, int(resolution * (height / width)))
+    else:
+        ny = resolution
+        nx = max(1, int(resolution * (width / height)))
+
+    x = np.linspace(x_min, x_max, nx)
+    y = np.linspace(y_min, y_max, ny)
     X, Y = np.meshgrid(x, y)
 
-    grid = np.full((resolution, resolution), trunk.base_conductivity)
+    def evaluate_pixel(px: float, py: float) -> float:
+        pos = Pos.from_cartesian(px, py)
+        return trunk.get_conductivity(pos, mode="Sum", add_base_cond=True)
 
-    trunk_mask = X**2 + Y**2 <= trunk.radius**2
-    grid[~trunk_mask] = 0.0
-
-    for anomaly in trunk.anomalies:
-        shape = anomaly.shape
-        cx, cy = getattr(shape, "cx", 0), getattr(shape, "cy", 0)
-        radius = getattr(shape, "radius", 0.1)
-        dist_sq = (X - cx) ** 2 + (Y - cy) ** 2
-        anomaly_mask = dist_sq <= radius**2
-        grid[anomaly_mask] = anomaly.conductivity
+    vectorized_eval = np.vectorize(evaluate_pixel)
+    grid = vectorized_eval(X, Y)
 
     return grid
 
