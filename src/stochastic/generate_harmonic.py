@@ -37,6 +37,8 @@ class StochasticTrunkFactory:
         base_cond_sigma: float = 0.002,
         wet_cond_mu: float = 0.1,
         wet_cond_sigma: float = 0.02,
+
+        max_cond: float = 0.5
     ):
         self.trunk_radius_mu = trunk_radius_mu
         self.trunk_radius_sigma = trunk_radius_sigma

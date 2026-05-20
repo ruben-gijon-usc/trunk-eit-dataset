@@ -12,6 +12,8 @@ class Shape(Serializable):
     SHAPE_TYPE: str = ""
 
     def __init__(self, center: Pos):
+        if not isinstance(center, Pos):
+            raise TypeError(f"Center type should be pos: {center}")
         self.center = center
 
     @property
@@ -78,6 +80,8 @@ class Circle(Shape):
 
     def __init__(self, center: Pos, radius: float):
         super().__init__(center)
+        if radius <= 0:
+            raise ValueError(f"Radius should be greater than zero: {radius}")
         self.radius = radius
 
     @classmethod
@@ -113,6 +117,8 @@ class Ellipse(Shape):
 
     def __init__(self, center: Pos, rx: float, ry: float, rotation: float = 0.0):
         super().__init__(center)
+        if rx <= 0 or ry <= 0:
+            raise ValueError(f"Both rx and ry should be greater than 0. {rx}, {ry}")
         self.rx = rx
         self.ry = ry
         self.rotation = rotation
@@ -167,6 +173,8 @@ class Harmonic(Shape):
 
     def __init__(self, center: Pos, base_radius: float, harmonics: list[tuple[float, float]]):
         super().__init__(center)
+        if base_radius <= 0:
+            raise ValueError(f"Radius should be greater than zero: {base_radius}")
         self.base_radius = base_radius
         self.harmonics = harmonics
 
@@ -207,15 +215,14 @@ class Harmonic(Shape):
         harmonic_area = (math.pi / 2.0) * sum(
             a**2 + b**2 for a, b in self.harmonics
         )
-
         return base_area + harmonic_area
 
 
 class ShapeFactory:
+    ACCEPTED_SHAPES: tuple[Shape] = (Circle, Ellipse, Harmonic)
     SHAPES: dict[str, type[Shape]] = {
-        Circle.SHAPE_TYPE: Circle,
-        Ellipse.SHAPE_TYPE: Ellipse,
-        Harmonic.SHAPE_TYPE: Harmonic,
+        s.SHAPE_TYPE: s 
+        for s in ACCEPTED_SHAPES
     }
 
     @classmethod
