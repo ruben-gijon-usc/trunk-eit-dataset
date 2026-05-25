@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..eidors.bridge import run_eidors_simulation
-from ..models import Anomaly, Circle, Pos, Trunk
+from ..models import Anomaly, Circle, Pos, SimpleTrunk, Trunk
 from ..simulation import generate_grid
 
 
@@ -69,8 +69,10 @@ def generate_random_trunk(config: PipelineConfig) -> Trunk:
             )
         )
 
-    return Trunk(
-        radius=config.trunk_radius, base_conductivity=config.base_conductivity, anomalies=anomalies
+    return SimpleTrunk.create(
+        radius=config.trunk_radius,
+        base_conductivity=config.base_conductivity,
+        anomalies=anomalies
     )
 
 

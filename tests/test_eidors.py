@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.eidors.bridge import EIDORSResult, get_eidors_mesh, run_eidors_simulation
-from src.models import Anomaly, Circle, Pos, Trunk
+from src.models import Anomaly, Circle, Pos, SimpleTrunk
 
 
 class TestEIDORSBridge:
@@ -28,7 +28,7 @@ class TestEIDORSBridge:
 
     def test_run_eidors_simulation_homogeneous(self):
         """Test EIDORS with homogeneous trunk (no anomalies)."""
-        trunk = Trunk(radius=1.0, base_conductivity=1.0, anomalies=[])
+        trunk = SimpleTrunk.create(radius=1.0, base_conductivity=1.0)
 
         result = run_eidors_simulation(trunk, n_electrodes=16)
 
@@ -40,7 +40,7 @@ class TestEIDORSBridge:
 
     def test_run_eidors_simulation_with_anomaly(self):
         """Test EIDORS with a single anomaly."""
-        trunk = Trunk(
+        trunk = SimpleTrunk.create(
             radius=1.0,
             base_conductivity=1.0,
             anomalies=[
@@ -57,7 +57,7 @@ class TestEIDORSBridge:
 
     def test_run_eidors_simulation_multiple_anomalies(self):
         """Test EIDORS with multiple anomalies."""
-        trunk = Trunk(
+        trunk = SimpleTrunk.create(
             radius=1.0,
             base_conductivity=1.0,
             anomalies=[
@@ -76,7 +76,7 @@ class TestEIDORSBridge:
 
     def test_voltage_measurements_count(self):
         """Test that we get expected number of voltage measurements."""
-        trunk = Trunk(radius=1.0, base_conductivity=1.0, anomalies=[])
+        trunk = SimpleTrunk.create(radius=1.0, base_conductivity=1.0)
         result = run_eidors_simulation(trunk, n_electrodes=16)
 
         # 16 electrodes, adjacent pattern should give 208 measurements

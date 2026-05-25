@@ -48,10 +48,41 @@ class EIDORSResult:
 
 
 def _anomalies_to_json(trunk: Trunk) -> str:
-    """Convert trunk anomalies to JSON string for Octave."""
+    """Convert trunk anomalies to JSON string for Octave EIDORS scripts.
+
+    The Octave simulate.m script expects:
+    {
+      "shape": {"shape_type": "circle", "cx": 0.3, "cy": 0.2, "radius": 0.15, ...},
+      "conductivity": 0.5
+    }
+    """
     anomalies = []
     for a in trunk.anomalies:
-        anomaly_dict = a.to_dict()  # Uses Anomaly.to_dict() which includes shape + conductivity
+        cx, cy = a.shape.center.to_cartesian()
+        shape_dict: dict = {
+            "shape_type": a.shape.shape_type,
+            "cx": cx,
+            "cy": cy,
+        }
+        s = a.shape
+        if hasattr(s, "radius"):
+            shape_dict["radius"] = s.radius
+        if hasattr(s, "rx"):
+            shape_dict["rx"] = s.rx
+        if hasattr(s, "ry"):
+            shape_dict["ry"] = s.ry
+        if hasattr(s, "rotation"):
+            shape_dict["rotation"] = s.rotation
+        if hasattr(s, "base_radius"):
+            shape_dict["base_radius"] = s.base_radius
+        if hasattr(s, "harmonics"):
+            shape_dict["harmonics"] = s.harmonics
+            shape_dict["n_harmonics"] = len(s.harmonics)
+
+        anomaly_dict = {
+            "shape": shape_dict,
+            "conductivity": a.conductivity,
+        }
         anomalies.append(anomaly_dict)
     return json.dumps(anomalies) if anomalies else "[]"
 
@@ -72,7 +103,7 @@ def run_eidors_simulation(trunk: Trunk, n_electrodes: int = 16) -> EIDORSResult 
 
         script = f"""
 addpath('{SCRIPT_DIR}');
-simulate({n_electrodes}, {trunk.base_conductivity}, '{anomalies_json}', '{tmpdir}');
+simulate({n_electrodes}, {trunk.base.conductivity}, '{anomalies_json}', '{tmpdir}');
 """
 
         script_path = os.path.join(tmpdir, "run.m")

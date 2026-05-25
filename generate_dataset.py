@@ -7,7 +7,7 @@ from src.stochastic.generate_harmonic import StochasticTrunkFactory
 from src.data_representations.grid import generate_grid
 from src.models import Trunk
 
-def get_dataset(n: int) -> list:
+def get_dataset(n: int) -> list[Trunk]:
     healthy_factory = StochasticTrunkFactory(
         trunk_radius_mu=0.3, 
         expected_anomalies=1.5,
