@@ -76,8 +76,10 @@ def _anomalies_to_json(trunk: Trunk) -> str:
         if hasattr(s, "base_radius"):
             shape_dict["base_radius"] = s.base_radius
         if hasattr(s, "harmonics"):
-            shape_dict["harmonics"] = s.harmonics
-            shape_dict["n_harmonics"] = len(s.harmonics)
+            n_harm = len(s.harmonics)
+            shape_dict["n_harmonics"] = n_harm
+            shape_dict["a_coeffs"] = [h[0] for h in s.harmonics]
+            shape_dict["b_coeffs"] = [h[1] for h in s.harmonics]
 
         anomaly_dict = {
             "shape": shape_dict,

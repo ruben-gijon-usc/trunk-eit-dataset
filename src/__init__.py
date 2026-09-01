@@ -9,16 +9,11 @@ Structure:
 """
 
 from .models import Anomaly, Pos, Trunk
-from .pipeline import DatasetSample, PipelineConfig, run_pipeline
-from .simulation import generate_grid, grid2png
+from .data_representations import generate_grid
 
 __all__ = [
     "Trunk",
     "Anomaly",
     "Pos",
     "generate_grid",
-    "grid2png",
-    "run_pipeline",
-    "PipelineConfig",
-    "DatasetSample",
 ]

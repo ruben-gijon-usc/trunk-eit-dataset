@@ -1,5 +1,6 @@
 out/
 uv.lock
+dataset/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

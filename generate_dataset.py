@@ -1,67 +1,113 @@
+"""
+Dataset generation pipeline using src/forward_process.
+Generates random trunks via StochasticTrunkFactory and saves:
+  - grid/<i>.png    — conductivity image
+  - json/<i>.json   — serialized Trunk model
+  - voltages/<i>.npy — boundary voltage measurements
+  - elem_data/<i>.npy — per-element conductivities
+  - mesh/nodes.npy, mesh/elems.npy — shared FEM mesh (saved once)
+"""
+
 import json
 from pathlib import Path
-import numpy as np
-import matplotlib.pyplot as plt
 
-from src.stochastic.generate_harmonic import StochasticTrunkFactory
-from src.data_representations.grid import generate_grid
+import matplotlib.pyplot as plt
+import numpy as np
+
+from src.forward_process import ForwardResult, simulate_forward_process
 from src.models import Trunk
+from src.stochastic.generate_harmonic import StochasticTrunkFactory
+
+
+# ---------------------------------------------------------------------------
+# Dataset factories
+# ---------------------------------------------------------------------------
 
 def get_dataset(n: int) -> list[Trunk]:
     healthy_factory = StochasticTrunkFactory(
-        trunk_radius_mu=0.3, 
+        trunk_radius_mu=0.3,
         expected_anomalies=1.5,
-        pos_alpha=1.0, pos_beta=3.0 # Biased toward the center
+        pos_alpha=1.0,
+        pos_beta=3.0,  # biased toward center
     )
-
     decay_factory = StochasticTrunkFactory(
-        trunk_radius_mu=1.2, 
+        trunk_radius_mu=1.2,
         trunk_radius_sigma=0.3,
-        expected_anomalies=8.0, 
+        expected_anomalies=8.0,
         anomaly_scale=0.15,
-        pos_alpha=3.0, pos_beta=1.0 # Biased toward the bark
+        pos_alpha=3.0,
+        pos_beta=1.0,  # biased toward bark
     )
 
     dataset = [decay_factory.generate() for _ in range(n // 2)]
-    dataset += [healthy_factory.generate() for _ in range(n // 2)]
+    dataset += [healthy_factory.generate() for _ in range(n - n // 2)]
     return dataset
 
 
-def save_json(data: dict, path: Path):
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
+# ---------------------------------------------------------------------------
+# Save helpers
+# ---------------------------------------------------------------------------
+
+def save_sample(result: ForwardResult, i: int, base_path: Path) -> None:
+    """Persist all outputs for one sample."""
+    # Grid image
+    plt.imsave(base_path / f"grid/{i}.png", result.grid, cmap="viridis")
+
+    # Trunk model as JSON
+    with open(base_path / f"json/{i}.json", "w", encoding="utf-8") as fh:
+        json.dump(result.trunk.to_dict(), fh, indent=2)
+
+    # EIT measurements
+    np.save(base_path / f"voltages/{i}.npy", result.eit_result.voltages)
+    np.save(base_path / f"elem_data/{i}.npy", result.eit_result.elem_data)
 
 
-def save_grid(grid: np.ndarray, png_path: Path):
-    plt.imsave(png_path, grid, cmap='viridis')
+def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
+    """Save the shared FEM mesh (same for all samples with same n_electrodes)."""
+    np.save(base_path / "mesh/nodes.npy", result.eit_result.mesh.nodes)
+    np.save(base_path / "mesh/elems.npy", result.eit_result.mesh.elems)
+    print(
+        f"  Mesh saved: {len(result.eit_result.mesh.nodes)} nodes, "
+        f"{len(result.eit_result.mesh.elems)} elements"
+    )
 
 
-def save(trunk: Trunk, i: int, base_path: Path):
-    grid = generate_grid(trunk)
-    data = trunk.to_dict()
-
-    save_grid(grid, base_path / f"grid/{i}.png")
-    save_json(data, base_path / f"json/{i}.json")
-
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    N_SAMPLES = 5_000
-    
-    # Setup directory structure automatically
+    N_SAMPLES = 6
+    N_ELECTRODES = 16
+    GRID_RESOLUTION = 64
+
     base_path = Path("dataset")
-    (base_path / "grid").mkdir(parents=True, exist_ok=True)
-    (base_path / "json").mkdir(parents=True, exist_ok=True)
-    
-    print(f"🌲 Generating dataset of {N_SAMPLES} trees...")
+    for sub in ("grid", "json", "voltages", "elem_data", "mesh"):
+        (base_path / sub).mkdir(parents=True, exist_ok=True)
+
+    print(f"🌲 Generating {N_SAMPLES} random trunks...")
     dataset = get_dataset(N_SAMPLES)
-    
-    print("💾 Saving to disk...")
+
+    mesh_saved = False
+    failed = 0
+
     for i, trunk in enumerate(dataset):
-        data_trunk = trunk.to_dict()
-        save_json(data_trunk, base_path / f"json/{i}.json")
-        
-        # Print progress every 10 iterations
-        if (i + 1) % 10 == 0:
-            print(f"Saved {i + 1}/{N_SAMPLES}...")
-            
-    print("✅ Dataset generation complete!")
+        print(f"  [{i + 1}/{N_SAMPLES}] Simulating...", end=" ", flush=True)
+        result = simulate_forward_process(
+            trunk, resolution=GRID_RESOLUTION, n_electrodes=N_ELECTRODES
+        )
+
+        if result is None:
+            print("FAILED — skipping")
+            failed += 1
+            continue
+
+        if not mesh_saved:
+            save_mesh_once(result, base_path)
+            mesh_saved = True
+
+        save_sample(result, i, base_path)
+        print(f"✓  voltages={result.eit_result.voltages.shape}, grid={result.grid.shape}")
+
+    ok = N_SAMPLES - failed
+    print(f"\n✅ Done: {ok}/{N_SAMPLES} samples saved to '{base_path}/'")

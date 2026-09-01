@@ -68,7 +68,9 @@ function simulate(n_elec, base_cond, anomalies_json, tmpdir)
                         theta = atan2(cy - shape.cy, cx - shape.cx);
                         r_shape = shape.base_radius;
                         for n = 1:shape.n_harmonics
-                            r_shape = r_shape + shape.amplitude * shape.base_radius * sin(n * theta) / n;
+                            a_n = shape.a_coeffs(n);
+                            b_n = shape.b_coeffs(n);
+                            r_shape = r_shape + a_n * cos(n * theta) + b_n * sin(n * theta);
                         end
                         inside = r <= r_shape;
 
