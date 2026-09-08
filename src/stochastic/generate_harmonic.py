@@ -38,7 +38,8 @@ class StochasticTrunkFactory:
         wet_cond_mu: float = 0.1,
         wet_cond_sigma: float = 0.02,
 
-        max_cond: float = 0.5
+        max_cond: float = 0.5,
+        propagation_modes: list[Literal["Constant", "Linear", "Cos"]] | None = None
     ):
         self.trunk_radius_mu = trunk_radius_mu
         self.trunk_radius_sigma = trunk_radius_sigma
@@ -57,7 +58,8 @@ class StochasticTrunkFactory:
         self.wet_cond_mu = wet_cond_mu
         self.wet_cond_sigma = wet_cond_sigma
 
-        self.propagation_modes: list[Literal["Constant", "Linear", "Cos"]] = ["Constant", "Linear", "Cos"]
+        # Defaulting to exclusively Constant as requested for the moment
+        self.propagation_modes = propagation_modes if propagation_modes is not None else ["Constant"]
 
     def _poisson_sample(self, lam: float) -> int:
         """Generates a random integer from a Poisson distribution (Knuth's algorithm)."""

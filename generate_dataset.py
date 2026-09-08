@@ -77,7 +77,7 @@ def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    N_SAMPLES = 6
+    N_SAMPLES = 10_000
     N_ELECTRODES = 16
     GRID_RESOLUTION = 64
 
