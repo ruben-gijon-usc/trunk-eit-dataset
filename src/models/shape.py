@@ -221,7 +221,7 @@ class Harmonic(Shape):
 class ShapeFactory:
     ACCEPTED_SHAPES: tuple[Shape] = (Circle, Ellipse, Harmonic)
     SHAPES: dict[str, type[Shape]] = {
-        s.SHAPE_TYPE: s 
+        s.SHAPE_TYPE: s
         for s in ACCEPTED_SHAPES
     }
 

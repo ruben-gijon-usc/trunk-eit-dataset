@@ -8,8 +8,8 @@ Structure:
 - pipeline: Dataset orchestration (run_pipeline, PipelineConfig)
 """
 
-from .models import Anomaly, Pos, Trunk
 from .data_representations import generate_grid
+from .models import Anomaly, Pos, Trunk
 
 __all__ = [
     "Trunk",

@@ -119,7 +119,7 @@ def simulate_forward_process(
             fh.write(driver)
 
         proc = subprocess.run(
-            ["octave", "--no-gui", "--quiet", driver_path],
+            ["octave-cli", "--no-gui", "--quiet", driver_path],
             capture_output=True,
             text=True,
             timeout=octave_timeout,

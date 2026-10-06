@@ -9,6 +9,7 @@ Generates random trunks via StochasticTrunkFactory and saves:
 """
 
 import json
+import random
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -18,30 +19,26 @@ from src.forward_process import ForwardResult, simulate_forward_process
 from src.models import Trunk
 from src.stochastic.generate_harmonic import StochasticTrunkFactory
 
-
 # ---------------------------------------------------------------------------
 # Dataset factories
 # ---------------------------------------------------------------------------
 
 def get_dataset(n: int) -> list[Trunk]:
-    healthy_factory = StochasticTrunkFactory(
-        trunk_radius_mu=0.3,
-        expected_anomalies=1.5,
-        pos_alpha=1.0,
-        pos_beta=3.0,  # biased toward center
-    )
-    decay_factory = StochasticTrunkFactory(
-        trunk_radius_mu=1.2,
-        trunk_radius_sigma=0.3,
-        expected_anomalies=8.0,
-        anomaly_scale=0.15,
-        pos_alpha=3.0,
-        pos_beta=1.0,  # biased toward bark
-    )
+    class PaperTrunkFactory(StochasticTrunkFactory):
+        def _poisson_sample(self, lam: float) -> int:
+            return random.randint(1, 3)
 
-    dataset = [decay_factory.generate() for _ in range(n // 2)]
-    dataset += [healthy_factory.generate() for _ in range(n - n // 2)]
-    return dataset
+    factory = PaperTrunkFactory(
+        trunk_radius_mu=1.0,
+        trunk_radius_sigma=0.0,
+        base_cond_mu=1.0,
+        base_cond_sigma=0.0,
+        wet_cond_mu=100.0,
+        wet_cond_sigma=0.0,
+        propagation_modes=["Linear"],
+        anomaly_scale=0.25
+    )
+    return [factory.generate() for _ in range(n)]
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +74,7 @@ def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    N_SAMPLES = 10_000
+    N_SAMPLES = 10_220
     N_ELECTRODES = 16
     GRID_RESOLUTION = 64
 

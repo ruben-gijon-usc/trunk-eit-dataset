@@ -113,7 +113,7 @@ simulate({n_electrodes}, {trunk.base.conductivity}, '{anomalies_json}', '{tmpdir
             f.write(script)
 
         result = subprocess.run(
-            ["octave", "--no-gui", "--quiet", script_path],
+            ["octave-cli", "--no-gui", "--quiet", script_path],
             capture_output=True,
             text=True,
             timeout=300,
@@ -153,7 +153,7 @@ dlmwrite('{tmpdir}/elems.txt', img.fwd_model.elems, ' ');
             f.write(script)
 
         result = subprocess.run(
-            ["octave", "--no-gui", "--quiet", script_path],
+            ["octave-cli", "--no-gui", "--quiet", script_path],
             capture_output=True,
             text=True,
             timeout=120,

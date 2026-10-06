@@ -1,6 +1,7 @@
 import copy
 import math
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch.nn as nn
 

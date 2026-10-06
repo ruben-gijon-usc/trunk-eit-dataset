@@ -16,10 +16,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Circle as MplCircle
 from matplotlib.tri import Triangulation
+from src.simulation import generate_grid, grid2png
 
 from src.eidors.bridge import run_eidors_simulation
 from src.models import Anomaly, Circle, Pos, Trunk
-from src.simulation import generate_grid, grid2png
 
 OUTPUT_DIR = "out"
 

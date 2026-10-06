@@ -1,0 +1,1406 @@
+Neural Computing and Applications (2023) 35:5465–5477
+https://doi.org/10.1007/s00521-022-07988-7
+(0123456789().,-volV)(0123456789().
+,- volV)
+
+ORIGINAL ARTICLE
+
+Study and comparison of different Machine Learning-based
+approaches to solve the inverse problem in Electrical Impedance
+Tomographies
+Martı́n Aller1 • David Mera1
+
+•
+
+José Manuel. Cotos1 • Sebastián Villaroya1
+
+Received: 21 July 2022 / Accepted: 19 October 2022 / Published online: 4 November 2022
+ The Author(s) 2022
+
+Abstract
+Electrical Impedance Tomography (EIT) is a non-invasive technique used to obtain the electrical internal conductivity
+distribution from the interior of bodies. This is a promising method from the manufacturing viewpoint, since it could be
+used to estimate different physical inner body properties during the production of goods. Nevertheless, this technique
+requires dealing with an inverse problem that makes its usage in real-time processes challenging. Recently, Machine
+Learning techniques have been proposed to solve the inverse problem accurately. However, the majority of prior research
+is focused on qualitative results, and they typically lack a systematic methodology to determine the optimal hyperparameters appropriately. This work presents a systematic comparison of six popular Machine Learning algorithms: Artificial
+Neural Network, Random Forest, K-Nearest Neighbors, Elastic Net, Ada Boost, and Gradient Boosting. Particularly, the
+last two algorithms were based on decision tree learners. Furthermore, we studied the relationship between model performance and different EIT configurations. Specifically, we analyzed whether the measurement pattern and the number of
+used electrodes could increase the model performance. Experiments revealed that tree-based models present high performance, even better than Neural Networks, the most widely-used Machine Learning model to deal with EIT. Experiments
+also showed a model performance improvement when the EIT configuration was optimized. Most favorable metrics were
+attained using the tree-based Gradient Boosting model with a combination of both adjacent and mono measurement
+patterns as well as with 32 electrodes deployed during the tomographic process. With this particular setting, we achieved an
+accuracy of 99.14% detecting internal artifacts and a Root Mean Square Error of 4.75 predicting internal conductivity
+distributions.
+Keywords Machine learning  Artificial neural networks  Gradient boosting  Electrical impedance tomography
+
+1 Introduction
+Martı́n Aller, David Mera, José Manuel. Cotos, Sebastián
+Villaroya have been contributed equally to this work.
+& David Mera
+david.mera@usc.es
+Martı́n Aller
+martin.aller.dominguez@gmail.com
+José Manuel. Cotos
+manel.cotos@usc.es
+Sebastián Villaroya
+s.villarroya@usc.es
+1
+
+Department of Electrónica e Computación, Centro Singular
+de Investigación en Tecnoloxı́as Intelixentes (CiTIUS),
+Universidade de Santiago de Compostela, Jenaro de la Fuente
+Domı́nguez, 15782 Santiago de Compostela, Spain
+
+Different industrial scenarios, such as the wood manufacturing process, the inspection of internal structures, or the
+study of buried pipes, require a non-invasive analysis of
+target body internal compositions. Typically, bodies are
+evaluated using methods that qualitatively examine some
+inner physical property and generate a representative image
+with the corresponding inner feature distribution. After
+that, an expert would be able to generate a diagnosis
+according to the resulting image, which is usually enough
+for dealing with many of these situations. However, some
+industrial problems require a more extensive effort since it
+is necessary to know the specific property value for each
+target point.
+
+123
+
+5466
+
+Currently, there are several tomography techniques that
+allow the internal study of a body. The most well-known
+method is the Computed Tomography (CT) scan [1], which
+is widely used in medicine. However, the CT scan implies
+the use of ionizing radiation, which has many restrictions,
+such as the need for qualified staff and high-security
+measures. These constraints make it challenging to deploy
+this technology in industrial processes. Nevertheless, there
+are other less limited approaches that could be used not
+only in medicine but also in industrial environments. One
+of the emerging alternatives that have experienced a high
+development in the last years is the Electrical Impedance
+Tomography (EIT) [2].
+EIT is a non-invasive tomography technique that does
+not involve the utilization of ionizing radiation. This
+technique is used to obtain information about the electrical
+conductivity distribution of a body [3]. For that purpose, a
+set of external electrodes are placed around a target body.
+A group of these electrodes is fed with small electrical
+currents in order to send a signal across the body. Then, the
+signal is altered according to the body’s internal composition, and the remaining electrodes record the results. This
+process will then be repeated with several electrodes configurations following some stimulation pattern. With the
+recorded voltage values, it is possible to determine the
+internal electrical conductivity distribution, which can be
+used to estimate other physical properties such as the
+internal moisture distribution. Literature shows several EIT
+applications focused on various fields such as medicine
+(brain imaging [4–6], lung imaging [7, 8], etc.), industrial
+processes [9], geophysical subsurface imaging [10] and a
+wide variety of engineering applications such as damage
+detection and strain localization [11–14].
+The procedure of recording the electrode measurements
+is called the forward problem, and the method to determine
+the conductivity distribution from the voltages captured by
+the electrodes is usually known as the inverse problem,
+which is an ill-posed and highly nonlinear challenge [15].
+Two main approaches have been traditionally used to
+solve the inverse problem. The first one includes algorithms such as back-projection and the one-step GaussNewton, that assume a certain linearity in the response of
+the body [16]. They are able to solve the problem faster at
+the expense of a worse accuracy. The second option is
+composed of iterative algorithms such as the Primal Dual
+Interior Point Method (PDIPM) [17] and the Iterative
+Gauss-Newton (IGN) [18], which are based on physical
+differential equations. They start from an initial hypothesis
+about the internal electrical conductivity distribution and
+iteratively change the simulation values in order to obtain a
+convergence between the simulations results and the actual
+electrode measurements. Although the latter option is more
+accurate than the first one, it requires both time and large
+
+123
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+computational resources. These prerequisites make it difficult to apply iterative algorithms in real-time scenarios.
+The use of Machine Learning (ML) seems to be an
+appropriate approach to develop an accurate inverse
+problem solver. In fact, Literature shows notorious progress in the application of these types of techniques to deal
+with the inverse problem in the last decade. However, these
+approaches are usually focused on qualitative results and
+they typically lack of a systematic methodology to configure and to select the appropriate ML algorithm.
+Approaches based on Artificial Neuronal Networks (ANN)
+are largely used without a previous comparative process.
+The aim of this article is to provide a systematic study of
+different ML models to determine what type of model
+attains better results in solving the inverse problem. In this
+work, the model hyperparameter optimization step, which
+is usually poorly addressed in Literature, is also considered. Despite, previously approaches are mainly focused on
+models based on ANNs, we conclude that tree-based
+models are able to surpass ANNs from both qualitative and
+quantitative viewpoints. We also analyzed the impact of
+the EIT forward problem process configuration from the
+ML algorithm accuracy viewpoint, which is a subject not
+enough explored, yet. This configuration is key to develop
+a ML-based inverse problem solver since forward problem
+outputs are the solver inputs. Moreover, this configuration
+has a direct impact on the deployment of a real system. The
+obtained conclusions give valuable configuration options to
+be considered in future deployments of ML-based EIT
+systems.
+This paper is structured as follows: the mathematical
+basis behind EIT is summarized in Sect. 2; Sect. 3 introduces prior ML approaches for solving the EIT inverse
+problem; All the materials and methods used to develop
+this study, including software, ML algorithms, and datasets
+are described in Sect. 4; Sect. 5 describes the developed
+experiments and the appropriate discussion; and finally,
+Sect. 6 draws the conclusions and the future work.
+
+2 Electrical impedance tomography
+The EIT process consists of two main steps. On the one
+hand, the forward problem is the process of recording the
+electrode measurements, which is characterized through
+Eq. 1. This shows the governing equation for the voltage
+field generated by placing a current across a body [19]:
+r  ðr þ IxeÞr/ ¼ 0;
+
+ð1Þ
+
+where r is the electric impedance of the medium, I is the
+injected current, x is the frequency, e is the electric permittivity, and / stands for the electric potential. Assuming
+that a low frequency or direct current is used (x  0),
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+5467
+
+Eq. 1 can be reduced to Eq. 2, which is known as the
+standard governing equation for EIT:
+r  ðrr/Þ ¼ 0
+
+ð2Þ
+
+On the other hand, the inverse problem (also known as the
+Calderon’s problem [20]) is the method used to determine
+the body conductivity distribution from the voltages captured by the electrodes. Thus, solving the inverse problem
+consists of determining the unknown impedance distribution r from the known injected current I and measured
+voltage V. However, this is a highly nonlinear problem,
+because the potential distribution is a function of the
+impedance (/ ¼ /ðrÞ). Furthermore, the inverse problem
+is also an ill-posed problem because of the diffusive nature
+of electricity.
+
+3 Related work
+Traditionally, both linear and iterative algorithms have been
+used to deal with the EIT inverse problem. However, in the
+last few years, Literature shows promising approaches based
+on ML. Typically, these approaches are composed of the
+following simplified main phases: 1) the generation of a
+dataset of target bodies with inner artifacts, which could be
+obtained using virtual or real data; 2) the recording of electrode measurements (forward problem), which could also be
+addressed via simulations or real measurements; 3) the
+development of an ML model to deal with the inverse
+problem; and 4) the testing phase, where the trained model is
+finally examined from the accuracy viewpoint.
+A simplified version of this methodology is shown
+in [21], where a dataset of 200 virtual body meshes was
+used to develop a Radial Basis Function (RBF)-ANN
+model for solving the inverse problem. The electrode
+measurements (forward problem) were obtained through
+simulation using the EIDORS software [22]. Half of the
+meshes were used to train the model and the remainder to
+test it. However, there is not a validation phase to appropriately configure the model. The model accuracy was not
+obtained comparing the ML predictions with the original
+inputs, but with inverse problem solutions from EIDORS
+algorithms.
+Other approaches based on RBF-ANNs are described
+in [23, 24]. Nevertheless, they were focused on detecting
+the correct position of the artifacts instead of the specific
+inner feature distribution values. Moreover, their metrics
+were obtained comparing their results with linear inverse
+problem solvers, and it is well-known that these types of
+solvers have poor accuracy.
+The development of noise-robust ML algorithms was
+deeply explored by Sébastien Martin and Charles T.
+
+M. Choi [25, 26]. They presented methodologies able to
+deal with noise in voltage measurements and with target
+body deformations. Nonetheless, they only evaluated their
+approaches from a qualitative perspective.
+Convolutional Neural Networks (CNN) [27] have also
+been used by several authors to solve the EIT inverse
+problem. A hybrid algorithm to reconstruct EIT images is
+shown in [28], where a D-bar method combined with a
+CNN model was applied in order to develop a robust
+approach to minimize the blurred effect. Wei et al. developed a CNN model to reconstruct ‘‘heart and lung’’
+phantoms [29]. Nonetheless, the artificially-generated
+dataset used contained a limited number of elements (800
+bodies for training and 40 for testing). A more systematic
+and comprehensive methodology can be found in [30],
+where a CNN method is proposed for image reconstruction
+of Electrical Resistance Tomography (ERT), whose inverse
+problem is mathematically the same as the EIT’s one.
+Performance comparison of various ML models is
+shown in [31], where Least Angle Regression (LARS),
+Elastic Net (EN), and ANN models were evaluated. They
+used a complex algorithm composed of a set of models,
+where each specific model instance was trained to predict
+the value linked to one pixel in the tomography imagery.
+They trained the ML models using an early stop methodology through a validation set. However, the network
+hyperparameters were not optimized. Results showed a
+good algorithm performance, since all the inner artifacts
+were detected. Nevertheless, a significant amount of noise
+was also visualized in the resulting images. A real application of the algorithm is described in [32], where the inner
+moisture of buildings was analyzed. Again, this research
+was only focused on qualitative results since the main goal
+was to visually identify the inner moisture areas using a
+color scale.
+Recently, other approaches based on ANN were published [33, 34]. The former approach carried out a minimal
+ANN hyperparameter optimization. However, a validation
+set was not used to do it. The latter work only used four
+virtual body meshes to test the models. In both cases, the
+model performance could have been overestimated.
+Some authors have also explored the use of ANN to
+optimize the position of the electrodes used for measuring
+the voltages [27]. With this approach, they were able to
+improve the quality and reliability of the voltage measurements, reducing errors in EIT reconstructions.
+To summarize, there are some common features linked
+to the majority of the available approaches that must be
+highlighted. On the one hand, the use of ML models based
+on some kinds of ANN is the most popular approach.
+Nonetheless, these alternatives usually lack a systematic
+methodology to both select and optimize the ML model
+and its hyperparameters. Moreover, there is also an absence
+
+123
+
+5468
+
+of studies about how different EIT configurations affect the
+model accuracy. On the other hand, most of the approaches
+are usually focused on solving the inverse problem from a
+qualitative point of view. Nevertheless, the specific inner
+feature distribution values are necessary to deal with some
+industrial problems. In these scenarios, it is required to
+solve the inverse problem through a quantitative approach.
+
+4 Materials and methods
+In this paper, we developed and compared six popular
+Machine Learning algorithms in order to determine which
+one achieved better results for solving the inverse problem.
+In particular, we contrasted: ANN [35], EN [36], K-Nearest Neighbors (KNN) [37], Random Forest (RF) [38], Ada
+Boost (AB) [39] and Gradient Boosting (GB) [40]. All
+these algorithms were tested from both qualitative and
+quantitative points of view. It must be noted that RF, AB,
+and GB are ensemble methods, where decision trees were
+employed as ensemble components (estimators) to carry
+out all the experiments. Apart from the ML comparative,
+different forward problem configurations were also tested
+to analyze their impact on the model performance.
+Generally, the methodology followed in this paper to
+develop each ML model is aligned with the traditional
+main phases cited in the previous section. In particular, a
+simulation approach was included to deal with both the
+dataset generation and the forward problem solution. This
+is a common approach to fairly test several experiment
+configurations, as it is shown in the linked Literature. A
+detailed explanation is presented in [35], which was used
+as the primary study of reference to develop our work. We
+highly encourage readers to read it for a deeper context.
+
+4.1 Target bodies
+A dataset of 10,220 virtual 2D body meshes was used in
+this work at the starting point. Each body was simulated
+through a circular mesh with a one-meter radius. Every
+mesh was composed by a set of triangular elements, and
+each triangle was set up with an electrical conductivity
+default value of 1 S/m. The specific number of triangles per
+mesh is linked to the experiment configuration.
+In order to insert inner artifacts in the bodies, we used an
+algorithm previously developed [35] that allowed us to
+simulate a random number (from 1 to 3) of artifacts with
+arbitrary shapes. The artifact electrical conductivity values
+were set up according to a conductivity gradient value from
+a maximum of 100 S/m (artifact core) to a minimum of
+40 S/m (artifact edge). Figure 1 shows meshes with one,
+two, and three inner artifacts inside. The color legend
+
+123
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+symbolizes the conductivity gradient values used to fill the
+mesh triangles.
+
+4.2 Forward problem simulation
+As mentioned before, the forward problem consists of
+recording the electrode measurements during the tomography process. There are different ways of injecting and
+recording currents via the electrodes placed around the
+target body. Typically, they are known as stimulation and
+measurement patterns, respectively [41].
+We used EIDORS to simulate the forward problem. In
+particular, our experiments were performed employing
+different numbers of electrodes (8, 16, 32) placed
+equidistantly around the bodies. All our experiments used
+the adjacent pattern as the stimulation pattern. With this
+pattern, a fixed current of 0.010 A was injected iteratively
+in every pair of adjacent electrodes. It must be remarked
+that the number of iterations is equal to the number of used
+electrodes. At iteration ni , the current is injected between
+the electrodes i and i þ 1. In the final iteration, the pair of
+electrodes is composed of the electrode n and the electrode
+1. At each iteration, a set of voltages is measured using the
+rest of the electrodes. We used different measurement
+patterns depending on the experiment. In order to clarify
+each one, we describe them in a specific scenario where 16
+electrodes (16 iterations) were placed around the target
+body:
+• Adjacent pattern: at each iteration, the potential was
+measured in every pair of the remaining electrodes,
+obtaining 13 voltage values per iteration and 208 values
+altogether (see Fig. 2-left).
+• Mono pattern: at each iteration, the potential was
+individually measured in every one of the remaining
+electrodes with respect to a common ground, obtaining
+14 voltage values per iteration and 224 values altogether (see Fig. 2-center).
+• Opposite pattern: at each iteration, the potential was
+recorded between opposite electrodes. The combinations linked to the electrodes used to inject the current
+are rejected, so 12 voltage measurements were obtained
+after each iteration. It should be highlighted that using
+this pattern the last six measurements are the opposite
+of
+the
+first
+six
+for
+each
+repetition
+(v7 ¼ v1 ; v8 ¼ v2 ; v9 ¼ v3 ; :::). At the end of the
+process, a bunch of 192 voltage values was captured
+(see Fig. 2-right).
+
+4.3 Datasets
+The datasets used to develop the ML models were composed of both the voltage measurements obtained after
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+5469
+
+Fig. 1 Example of meshes with: one artifact (left), two artifacts (center), and three artifacts (right)
+
+Fig. 2 A visual description of the measurement patterns used in our
+experiments. In every displayed example, 16 electrodes are placed
+around the mesh. We applied a common stimulation pattern named
+adjacent pattern, where a fixed current of 0.010 A. was iteratively
+applied on each one of the 16 adjacent pairs of electrodes. The three
+diagrams show the first iteration of the forward problem process,
+where the current was injected between electrodes 1 and 2. The
+figure on the left symbolizes the adjacent measurement pattern, where
+
+at each iteration, 13 voltage measures linked to every pair of the
+remaining electrodes were saved. In the center, the figure displays the
+mono measurement pattern, where at each iteration, 14 voltage values
+were measured. Every measurement is linked to an electrode, which
+was not used during the stimulation process. Finally, the figure on the
+right exemplifies the opposite pattern, where the potential between
+opposite electrodes was measured (12 voltages per iteration), which
+were not used for current injection
+
+applying the forward problem over the virtual bodies (inputs) and the conductivity values of such virtual bodies
+(outputs).
+We named observation to the combination of inputsoutputs linked to each virtual body. Specifically, we used
+six datasets to carry out the different experiments: the
+original one, which was previously developed in [35], and
+five newly generated datasets with different configurations.
+All of them were composed of 10,220 observations in
+accordance with the dataset’s original size.
+The number of voltage values per observation (inputs) is
+conditioned by the stimulation and measurement patterns
+as well as the number of electrodes employed. Taking into
+account that in all our datasets the adjacent pattern has
+
+been used as the stimulation pattern, the number of voltage
+values can be determined through Eq. 3:
+nv ¼ ne  m;
+
+ð3Þ
+
+where nv is the number of voltages values, ne is the number
+of electrodes employed and m stands for the number of
+voltage values recorded at every iteration of the stimulation
+process. This last variable value depends on both the
+measurement pattern utilized and the number of electrodes
+used. In the specific case of 16 electrodes, it adopts a value
+of 13 for the adjacent pattern, a value of 14 for the mono
+pattern, and 12 for the opposite pattern. However, it must
+be remarked that we have also developed datasets joining
+the voltage measurements obtained from two different
+patterns for some experiments (see Sect. 5.1). In these
+
+123
+
+5470
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+cases, the individual results obtained via Eq. 3 should be
+added up. It must be also noted that when using the combination of the adjacent and mono patterns, there exists
+redundancy in the data since every voltage measure for the
+adjacent pattern complies with the following expression:
+dvm adjacent ¼ vm monoi  vm monoiþ1
+
+ð4Þ
+
+In Eq. 4, i simbolizes the electrode number where the
+voltage is being meassured. This implies that every voltage
+measure obtained with the adjacent pattern can also be
+achieved by applying simple transformations to the voltages obtained through the mono pattern.
+The number of conductivity values per mesh (outputs) is
+always equal to the mesh density, considering mesh density
+as the number of triangles that compose the mesh. When
+using 8 and 16 electrodes, we have employed 844-triangles. However, in the case of using 32 electrodes, we have
+utilized meshes with 1,128 triangles.
+Table 1 shows the specific features associated with
+every employed dataset. These datasets are identified to
+make the references in the following sections easier.
+Specifically, D1 identifies the original dataset from [35].
+All datasets are available online, so the experiments can be
+repeated if necessary (https://gitlab.citius.usc.es/cograde/
+datasets_eit_ml_comparative).
+
+5 Experiment results and discussion
+In the experimental work to compare the proposed ML
+algorithms, we used the same methodology to develop all
+the different models. The dataset D1 was split into three
+sets: training (70% of the data), validation (15% of the
+data), and test (15% of the data). Every model was trained
+and optimized from the hyperparameter viewpoint using
+both training and validation sets. Particularly, we used an
+intensive Grid search optimization process [42] based on
+the model performance, which was determined via the
+MSE linked to the validation set, in order to select the
+optimal hyperparameters. The specific evaluated ranges are
+shown in Table 2. Once the best configuration was selected
+for every model, they were trained from scratch with the
+optimal hyperparameters. This was achieved using a fused
+Table 1 Comparison of the
+datasets used for the
+experiments, showing the
+specific features linked to the
+dataset observations
+
+123
+
+training set composed of both the original training data and
+the validation set (85% of the available data). Finally,
+model metrics were obtained using the test set. The optimal
+hyperparameters selected for every model are also listed in
+Table 2.
+Our starting point was the aforementioned study [35],
+and the ANN model was directly trained using the optimal
+hyperparameters proposed there, since both studies shared
+the same model development methodology. It must also be
+noted that the AB and the GB algorithms cannot handle a
+multioutput problem natively. To solve this inconvenience,
+we trained a specific model to predict the value of every
+mesh element. Then, metrics were calculated evaluating
+the resulting models (844) for each one of these algorithms.
+This model-point approach was also followed in other
+works [31], as described in the related work section.
+In order to remove noise from predictions, the same
+post-processing technique proposed in [35] was applied
+over all the evaluated approaches. Basically, this process
+transforms the model outputs with values lower than a
+certain threshold into background. The procedure to select
+this optimal threshold was based on ROC curves.
+Then, results were evaluated from both qualitative and
+quantitative perspectives according to the following metrics: RMSE, MAE, accuracy, and Cohen’s Kappa coefficient (j) [43]. On the one hand, the RMSE and the MAE
+are quantitative metrics that allow us to analyze the model
+performance by identifying specific distribution values. On
+the other hand, the accuracy and the Cohen’s Kappa
+coefficient measure qualitative results in order to evaluate
+the model performance to correctly place the inner artifacts
+inside bodies. Since qualitative metrics require two classes,
+mesh triangles with a background conductivity value of
+1 S/m were associated with the negative class (they are not
+part of an inner artifact), while triangles with higher conductivity values were associated with the positive class
+(they are part of an inner artifact).
+Table 3 enumerates the obtained metrics for every
+model. From a quantitative viewpoint, the GB model
+achieved the lowest metrics (which implies a better model
+performance), cutting down the ANN metrics by more than
+a 50%. However, it is interesting to observe the detailed
+information about the specific model behavior for every
+
+Ref.
+
+Electrodes
+
+Measurement pattern
+
+Voltage measurements
+
+Conductivity measurements
+
+D1
+
+16
+
+Adjacent
+
+208
+
+844
+
+D2
+
+16
+
+Mono
+
+224
+
+844
+
+D3
+
+16
+
+Opposite
+
+192
+
+844
+
+D4
+
+16
+
+Adjacent-mono
+
+432 (208 ? 224)
+
+844
+
+D5
+
+8
+
+Adjacent-mono
+
+88 (40 ? 48)
+
+844
+
+D6
+
+32
+
+Adjacent-mono
+
+1,888 (928 ? 960)
+
+1,128
+
+Neural Computing and Applications (2023) 35:5465–5477
+Table 2 Comparison of
+machine learning models.
+
+Model
+ANN
+
+5471
+
+Evaluated hyperparameters
+
+Optimal tuned hyperparameters
+
+Hidden neurons: {1 to 2*inputs}
+
+Hidden neurons: 369
+
+Learning rate: {10, 1, 0.1, 0.01, 0.001}
+
+Learning rate: 1.0
+
+Hidden layers: 1
+Activation function: relu
+Output activation function: tanh
+Data normalization: feature scaling([-1,1])
+Cost function: MSE
+More details in [35]
+KNN
+
+Neighbours: {1,2,...,20}
+
+Neighbours: 5
+
+Distance: {Euclidean, Manhattan,
+
+Distance: Manhattan
+
+Chebyshev, Minkowski, WMinkowski,
+SEuclidean, Mahalanobis}
+EN
+
+Alpha: {0.5 to 1, by 0.1}
+
+Alpha: 0.5
+
+L1 ratio: {0.2 to 0.8, by 0.1}
+
+L1 ratio: 0.2
+
+Max. iterations: 1000
+Tolerance: 1e-4
+RF
+
+Estimators: {25, 50, 100, 150, 200}
+
+Estimators: 200
+
+Max. features: {sqrt, log2, 0.1, 0.2, 0.3}
+
+Max. features: 0.3
+
+Bootstrap: {True, False}
+
+Bootstrap: False
+
+Criterion: MSE
+Min. samples to split: 2
+Min. samples to be a leaf: 1
+AB
+
+Estimators: {25, 50, 100, 150, 200}
+
+Estimators: 200
+
+Learning rate: {0.1, 0.25, 0.5, 0.75, 0.9}
+
+Learning rate: 0.1
+
+Loss function: Linear
+Criterion: MSE
+Max. depth: 3
+Min. samples to split: 2
+Min. samples to be a leaf: 1
+GB
+
+Estimators: {25, 50, 100, 150, 200}
+
+Estimators: 200
+
+Learning rate: {0.1, 0.25, 0.5, 0.75, 0.9}
+Max. features: {sqrt, log2, 0.1, 0.2, 0.3}
+
+Learning rate: 0.25
+Max. features: 0.3
+
+Loss function: Least squares
+Criterion: Friedman MSE
+Min. samples to split: 2
+Min. samples to be a leaf: 1
+Tolerance: 1e-4
+The column Evaluated hyperparameters lists the evaluated hyperparameter ranges, while the column
+Optimal tuned hyperparameters shows the optimal hyperparameter values selected via the optimization
+search
+
+test item, which is shown in Fig. 3. This figure depicts the
+RMSE boxplot per virtual body (mesh) from the test set.
+This metric allowed us to evaluate the model variability.
+The GB showed the best RMSE with a restrained variability. However, it must also be observed that the KNN
+had significant variability, despite having a relatively low
+RMSE. This proves a model’s weakness in some specific
+scenarios, which is undesired in industrial environments.
+
+These outliers are related to meshes with several close
+artifacts, where the KNN had difficulty separating them in
+its predictions. Figure 4 shows a mesh with two artifacts
+and the tomography reconstruction by all the evaluated ML
+models. It can be noted that, in this case, all the models
+were able to separate the two inner artifacts. Nonetheless,
+in those situations where the artifacts were placed too close
+to each other, the EN and the KNN generated inaccurate
+
+123
+
+5472
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+Table 3 Quantitative and qualitative metric comparison linked to the
+tuned machine learning models
+Model
+
+RMSE
+
+MAE
+
+Accuracy
+
+j
+
+ANN
+
+15.6
+
+7.99
+
+98.05%
+
+95.68%
+
+KNN
+
+14.55
+
+5.16
+
+95.97%
+
+91.08%
+
+EN
+
+19.86
+
+10.56
+
+94.65%
+
+88.22%
+
+RF
+
+11.35
+
+4.13
+
+97.47%
+
+94.39%
+
+AB
+
+11.85
+
+6.07
+
+97.84%
+
+95.21%
+
+GB
+
+7.11
+
+2.48
+
+98.93%
+
+97.61%
+
+reconstructions, joining the artifacts. This scenario can be
+observed in Fig. 5.
+From the qualitative perspective, Table 3 also shows
+that the GB achieved the highest accuracy and j (which
+implies a better model performance). However, considering only these metrics, the second-best model is the ANN,
+with very close results to the GB. This means that the ANN
+is capable of separating inner artifacts with high accuracy,
+but it has more difficulties than the GB to predict the exact
+conductivity values. Specific quality results for these two
+models are shown in Tables 4 and 5 through the respective
+confusion matrix.
+In the first view, it is surprising that a decision-treebased model (GB) obtained the best performance, taking
+into account that ANN approaches are the most popular
+solvers in Literature. Nevertheless, it is worth remembering
+that most of the previously published approaches are only
+based on qualitative results, where model metrics are very
+similar. From all the evaluated metrics, we selected the GB
+as the most appropriate model to deal with the inverse
+
+problem, and it was consequently used for the rest of the
+experiments described in this paper, in particular, for the
+evaluation of the model performance with several EIT
+forward problem configurations.
+
+5.1 Forward problem configuration:
+measurement pattern
+The GB model performance was evaluated according to
+different measurement pattern configurations. Specifically,
+the following ones were studied: adjacent, mono, opposite,
+adjacent?mono. In order to evaluate them, the GB model
+was trained with the appropriate dataset (D1 to D4,
+respectively, see Table 1 for more details). It must be
+highlighted that the number of model inputs changes
+according to the pattern used. Thus, the selected model was
+trained from scratch for each combination. The same
+methodology described before, including the hyperparameter optimization and the post-processing phase, was used
+to develop the appropriate GB model for these
+experiments.
+Table 6 shows the model metrics obtained in the test
+phase for every one of the four studied pattern approaches.
+The lowest RMSE is attained by combining both the
+adjacent and the mono patterns. Although this is the configuration with the highest number of inputs, the
+improvement in the prediction is not merely the consequence of a higher input dimension because, as stated in
+Sect. 4.2, the adjacent data can be deduced from the mono
+data by applying linear transformations. This means that
+the adjacent-mono configuration does not contain additional information that did not exist previously in the
+adjacent or mono configurations. Therefore, the better
+performance is related to the fact that Gradient Boosting
+works better with certain sets of features over others representing the same information.
+Figure 6 shows an image with three artifacts and the
+reconstruction with the studied measurement patterns. The
+reconstruction made with the adjacent-mono measurement
+pattern was clearly the most similar one to the original
+image. Moreover, the reconstruction of the artifact
+boundaries was very precise.
+
+5.2 Forward problem configuration: number
+of electrodes
+
+Fig. 3 Boxplots of the RMSE achieved by every model. The model
+variability could be evaluated in order to detect anomalies. The KNN
+model obtained a respectable global RMSE value. However, it shows
+a high variability associated with some specific scenarios related to
+close artifacts
+
+123
+
+Using the GB model as well as the measurement pattern
+(adjacent?mono) proposed in subsection 5.1, we carried
+out a new comparative focused on the number of electrodes
+involved in the forward problem. In particular, 8, 16, and
+32 electrodes were tested. Readers should note that the
+results from 16 electrodes were already obtained in
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+Fig. 4 Image of a mesh with two artifacts (top-left) and the different
+evaluated model reconstructions: (top-center) ANN, (top-right) EN,
+(center-left) KNN, (center-center) RF, (center-right) AB, and
+
+5473
+
+(bottom) GB. All the evaluated ML models were able to reconstruct
+two artifacts whether they are clearly isolated
+
+Fig. 5 Image of a mesh with two close artifacts (left) and inaccurate reconstructions with KNN (center) and EN (right). KNN and EN models
+have reconstructions issues with close artifacts since they use to join them
+
+123
+
+5474
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+Table 4 ANN model confusion matrix.
+Target class
+
+Output class
+
+0
+
+1
+
+0
+
+837,897 (64.76%)
+
+16,617 (1.28%)
+
+1
+
+8,544 (0.66%)
+
+430,794 (33.3%)
+
+Mesh triangles with a conductivity value of 1 S/m were associated
+with class-0 (no artifact), while triangles with higher conductivity
+values were associated with class-1 (artifact). More than the 98% of
+the mesh elements were correctly classified with the ANN model.
+However, there are a 1.28% of the false negatives
+
+Table 5 GB model confusion matrix.
+Target class
+
+Output class
+
+0
+1
+
+0
+
+1
+
+845,345 (65.34%)
+4,715 (0.36%)
+
+9,169 (0.71%)
+434,623 (33.59%)
+
+Mesh triangles with a conductivity value of 1 S/m were associated
+with class-0 (no artifact), while triangles with higher conductivity
+values were associated with class-1 (artifact). Almost the 99% of the
+mesh elements were correctly classified with the GB model. In
+addition, false positives and false negatives are reduced by almost
+50% compared to the metrics obtained by the ANN model
+
+previous experiments. Thus, new experiments were only
+focused on 8 and 32 electrodes. Datasets D5 and D6 were
+used to train the model again. It should be pointed out that
+when the number of electrodes is modified, the number of
+
+Table 6 Gradient Boosting
+model comparison according to
+the measurement pattern used
+during the forward problem.
+
+Pattern
+
+Inputs
+
+Adjacent
+
+208
+
+the generated voltage values (inputs) also changes, as in the
+case of modifying the measurement pattern. Furthermore,
+when using 32 electrodes, the number of mesh elements
+(outputs) is also increased, from 844 to 1128. This dataset
+modifications require a new training phase from scratch.
+Again, the same methodology and hyperparameter optimization described in previous sections was used to retrain
+the GB model. Table 7 shows the model metrics according
+to the number of used electrodes.
+Globally, Table 7 and Fig. 7 show that best results were
+achieved with 32 electrodes. Furthermore, it can be noted
+that the higher the number of electrodes, the lower the
+RMSE. This is due to the fact that with a higher number of
+electrodes, the number of voltage values increases. Consequently, the input dimension also growths, so the ML
+models have more information in every observation to
+learn.
+Electrode experiments must also be carefully analyzed
+in order to deploy the approach in real environments.
+Fewer electrodes would be able to simplify and speed up
+the forward problem. From a qualitative point of view,
+there is a significant improvement between 8 and 16
+electrodes. Between these two combinations, the Kappa
+coefficient increases in four percentage units, so the
+probability of agreement by random chance is minimized.
+Moreover, the statistical dispersion is also cutting down, as
+is depicted in Fig. 7. Fewer differences were observed
+between 32 and 16 electrodes, but it must be noted that the
+32-electrodes configuration is a more complex configuration that also forces to increase the mesh density.
+
+Optimal hyperparameters
+
+RMSE
+
+MAE
+
+Accuracy
+
+j
+
+Estimators: 200
+
+7.11
+
+2.49
+
+98.93
+
+97.61
+
+7.86
+
+2.77
+
+98.75
+
+97.23
+
+7.39
+
+2.62
+
+98.98
+
+97.72
+
+6.85
+
+2.38
+
+99.14
+
+98.09
+
+Learning rate: 0.25
+Max. features: 0.3
+Opposite
+
+192
+
+Estimators: 200
+Learning rate: 0.25
+Max. features: 0.3
+
+Mono
+
+224
+
+Estimators: 200
+Learning rate: 0.1
+Max. features: 0.3
+
+Adjacent ? mono
+
+432
+
+Estimators: 200
+
+(208 ? 224)
+
+Learning rate: 0.1
+Max. features: 0.3
+
+The column Optimal tuned hyperparameters shows the optimal hyperparameter values selected to configure the model in each scenario. RMSE and MAE symbolize quantitative metrics. Accuracy and j are
+values related to qualitative metrics
+
+123
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+5475
+
+Fig. 6 Image of a mesh with three artifacts (top-left) and reconstruction with the adjacent pattern (top-center), the opposite pattern (top-right), the
+mono pattern (bottom-left), and the combination of the adjacent and the mono patterns (bottom-right)
+Table 7 Gradient Boosting
+model performance comparison
+according to the number of
+electrodes used during the
+forward problem.
+
+Elect.
+
+Inputs
+
+Outputs
+
+8
+
+88
+
+844
+
+(40 ? 48)
+16
+
+432
+
+Optimal hyperparameters
+
+RMSE
+
+MAE
+
+Accuracy
+
+j
+
+Estimators: 200
+
+11.14
+
+4.26
+
+97.34
+
+94.08
+
+6.85
+
+2.38
+
+99.14
+
+98.09
+
+4.75
+
+1.41
+
+99.45
+
+98.65
+
+Learning rate: 0.25
+844
+
+(208 ? 224)
+
+Max. features: 0.3
+Estimators: 200
+Learning rate: 0.1
+Max. features: 0.3
+
+32
+
+1888
+
+1128
+
+(928 ? 960)
+
+Estimators: 200
+Learning rate:
+Max. features: 0.3
+
+All of the evaluated approaches were trained with data generated with the measurement pattern selected in
+the previous step (adjacent?mono)
+
+6 Conclusions and further work
+The use of EIT is interesting in industrial environments
+because it allows inspecting target bodies internally in a
+non-invasive way. However, the solution of the inverse
+problem linked to the EIT method is a major limitation due
+to the fact that traditional techniques are not able to solve it
+in real-time accurately. Nevertheless, ML models have
+proved to be significantly superior to traditional solver
+
+algorithms, opening up opportunities to use EIT in industrial processes.
+In this work, we carried out a systematic comparison of
+several ML approaches: ANN, EN, RF, KNN, AB, and GB.
+These models were compared as inverse solvers from both
+viewpoints: quantitative and qualitative. Although all the
+evaluated models achieved acceptable results, the GB
+model based on decision tree learners was the one that
+obtained the best metrics from both perspectives and with
+less statistical dispersion. Furthermore, this experiment
+
+123
+
+5476
+
+Neural Computing and Applications (2023) 35:5465–5477
+
+industry. Particularly, we will use a ML approach to analyze the moisture distribution in wood-based products for
+detecting anomalies. In order to get an optimum ML model
+for this real use-case, we also expect to improve the
+hyperparameter selection phase evaluating larger parameter ranges as well as using a more complex search strategy.
+
+Fig. 7 Boxplot of the RMSE achieved with every evaluated
+combination of electrodes
+
+showed that all the tree-based models evaluated (RF, GB
+and AB) are able to achieve comparable and even better
+results than the ANN. The use of these models to solve the
+EIT inverse problem remains underinvestigated, so it could
+be a potential line of research.
+In the last part of this work, we carried out different
+experiments linked to the impact of the forward problem
+configuration in the ML model accuracy, which is not
+frequently analyzed in Literature. In the first one, we
+compared the performance of the GB model using different
+kinds of measurement patterns: adjacent, opposite, mono,
+and the combination of the adjacent and mono patterns.
+Best results were attained with the last configuration, but
+the performance differences between distinct combinations
+were minimal.
+In the second experiment, we compared different combinations of the number of electrodes during the forward
+problem. Clearly, a higher number of electrodes offers
+better results. Nevertheless, the combination with 16
+electrodes is the most balanced approach between model
+performance and complexity. Again, the use of a more
+complex solution (32 electrodes) should be considered
+whether the highest accuracy is required.
+Generally, configurations that allow increasing the
+number of inputs improve the model performance. This is
+mainly due to the EIT inverse problem being a very
+unbalanced challenge (more outputs than inputs), and this
+fact makes it difficult to train the models. Thus, more
+training information is helpful in the model development.
+Oppositely, more training information usually means more
+complex systems to work in real time. Hence, there exists a
+tradeoff that should be analyzed according to the problem
+and the required accuracy.
+All these experiments were carried out using virtual
+datasets generated with EIDORS. However, in future
+works, we plan to study a real use-case related to the wood
+
+123
+
+Acknowledgements This work has received financial support from
+the Consellerı́a de Educación, Universidade e Formación Profesional
+(accreditation 2019–2022 ED431G-2019/04) and the European
+Regional Development Fund (ERDF), which acknowledges the
+CiTIUS - Centro Singular de Investigación en Tecnoloxı́as Intelixentes da Universidade de Santiago de Compostela as a Research
+Center of the Galician University System.
+Computational resources were provided by the Galicia Supercomputing Center (CESGA).
+We greatly appreciate the valuable comments from the reviewers
+that have helped us to improve our work.
+Funding Open Access funding provided thanks to the CRUE-CSIC
+agreement with Springer Nature.
+Data availability The datasets generated during and/or analyzed
+during the current study are available in the following repository:
+https://gitlab.citius.usc.es/cograde/datasets_eit_ml_comparative
+
+Declarations
+Conflict of interest There is no potential conflict of interest in our
+paper. And all authors have seen the manuscript and approved to
+submit to your journal.
+Open Access This article is licensed under a Creative Commons
+Attribution 4.0 International License, which permits use, sharing,
+adaptation, distribution and reproduction in any medium or format, as
+long as you give appropriate credit to the original author(s) and the
+source, provide a link to the Creative Commons licence, and indicate
+if changes were made. The images or other third party material in this
+article are included in the article’s Creative Commons licence, unless
+indicated otherwise in a credit line to the material. If material is not
+included in the article’s Creative Commons licence and your intended
+use is not permitted by statutory regulation or exceeds the permitted
+use, you will need to obtain permission directly from the copyright
+holder. To view a copy of this licence, visit http://creativecommons.
+org/licenses/by/4.0/.
+
+References
+1. Buzug TM (2011) Computed tomography. In: Springer handbook
+of medical technology, pp 311–342. Springer, Heidelberg
+2. Bayford RH (2006) Bioimpedance tomography (electrical impedance tomography). Annu Rev Biomed Eng 8:63–91
+3. Cheney M, Isaacson D, Newell JC (1999) Electrical impedance
+tomography. SIAM Rev 41(1):85–101
+4. Tidswell T, Gibson A, Bayford RH, Holder DS (2001) Threedimensional electrical impedance tomography of human brain
+activity. NeuroImage 13(2):283–294
+5. Aristovich KY, Packham BC, Koo H, Dos Santos GS, McEvoy
+A, Holder DS (2016) Imaging fast electrical activity in the brain
+with electrical impedance tomography. NeuroImage 124:204–213
+6. Shi X, Li W, You F, Huo X, Xu C, Ji Z, Liu R, Liu B, Li Y, Fu F
+et al (2018) High-precision electrical impedance tomography data
+
+Neural Computing and Applications (2023) 35:5465–5477
+acquisition system for brain imaging. IEEE Sens J
+18(14):5974–5984
+7. Adler A, Amyot R, Guardo R, Bates J, Berthiaume Y (1997)
+Monitoring changes in lung air and liquid volumes with electrical
+impedance tomography. J Appl Phys 83(5):1762–1767
+8. de Castro Martins T, Sato AK, de Moura FS, de Camargo EDLB,
+Silva OL, Santos TBR, Zhao Z, Möeller K, Amato MBP, Mueller
+JL et al (2019) A review of electrical impedance tomography in
+lung applications: theory and algorithms for absolute images.
+Ann Rev Control 48:442–471
+9. Yao J, Takei M (2017) Application of process tomography to
+multiphase flow measurement in industrial and biomedical fields:
+a review. IEEE Sens J 17(24):8196–8205
+10. Church P, McFee JE, Gagnon S, Wort P (2006) Electrical
+impedance tomographic imaging of buried landmines. IEEE
+Trans Geosci Remote Sens 44(9):2407–2420
+11. Tallman TN, Gungor S, Wang KW, Bakis CE (2014) Damage
+detection and conductivity evolution in carbon nanofiber epoxy
+via electrical impedance tomography. Smart Mater Struct
+23(4):045034. https://doi.org/10.1088/0964-1726/23/4/045034
+12. Hassan H, Tallman TN (2020) Failure prediction in self-sensing
+nanocomposites via genetic algorithm-enabled piezoresistive
+inversion. Struct Health Monitor 19(3):765–780. https://doi.org/
+10.1177/1475921719863062
+13. Tallman TN, Wang KW (2016) Damage and strain identification
+in multifunctional materials via electrical impedance tomography
+with constrained sine wave solutions. Struct Health Monitor
+15(2):235–244. https://doi.org/10.1177/1475921716635574
+14. Tallman T, Gungor S, Koo G, Bakis C (2017) On the inverse
+determination of displacements, strains, and stresses in a carbon
+nanofiber/polyurethane nanocomposite from conductivity data
+obtained via electrical impedance tomography. J Intell Mater Syst
+Struct
+28(18):2617–2629.
+https://doi.org/10.1177/
+1045389X17692053
+15. Kabanikhin SI (2008) Definitions and examples of inverse and illposed problems 16(4):317–357
+16. Harikumar R, Prabu R, Raghavan S (2013) Electrical impedance
+tomography (eit) and its medical applications: a review. Int J Soft
+Comput Eng 3(4):193–198
+17. Borsic A, Adler A (2012) A primal-dual interior-point framework
+for using the l1 or l2 norm on the data and regularization terms of
+inverse problems. Inverse Problems 28(9):095011
+18. Ortega JM, Rheinboldt WC (2000) Iterative solution of nonlinear
+equations in several variables. Society for Industrial and Applied
+Mathematics, Philadelphia PA. https://doi.org/10.1137/1.
+9780898719468
+19. Stacey RW (2006) Electrical impedance tomography. Department of Energy and by the Department of Petroleum Engineering,
+Stanford University
+20. Uhlmann G (2009) Electrical impedance tomography and calderón’s problem. Inverse problems 25(12):123011
+21. Michalikova M, Abed R, Prauzek M, Koziorek J (2014) Image
+reconstruction in electrical impedance tomography using neural
+network. In: Biomedical engineering conference (CIBEC), 2014
+cairo international, pp 39–42. IEEE
+22. Adler A, Lionheart WR (2006) Uses and abuses of EIDORS: an
+extensible software base for EIT. Physiol Meas 27(5):25
+23. Wang C, Lang J, Wang H-X (2004) RBF neural network image
+reconstruction for electrical impedance tomography. In: Machine
+learning and cybernetics, 2004. Proceedings of 2004 international
+conference on, vol 4, pp 2549–2552. IEEE
+24. Wang P, Li H-l, Xie L-l, Sun Y-c (2009) The implementation of
+FEM and RBF neural network in EIT. In: Intelligent networks
+
+5477
+and intelligent systems, 2009. ICINIS’09. Second international
+conference on, pp 66–69. IEEE
+25. Martin S, Choi CT (2016) Nonlinear electrical impedance
+tomography reconstruction using artificial neural networks and
+particle swarm optimization. IEEE Trans Magn 52(3):1–4
+26. Martin S, Choi CT (2017) A post-processing method for threedimensional electrical impedance tomography. Scientific Rep
+7(1):7212
+27. Smyl D, Liu D (2020) Optimizing electrode positions in 2-d
+electrical impedance tomography using deep learning. IEEE
+Trans Instrum Meas 69(9):6030–6044. https://doi.org/10.1109/
+TIM.2020.2970371
+28. Hamilton SJ, Hauptmann A (2018) Deep d-bar: real-time electrical impedance tomography imaging with deep neural networks.
+IEEE Trans Med Imag 37(10):2367–2377
+29. Wei Z, Liu D, Chen X (2019) Dominant-current deep learning
+scheme for electrical impedance tomography. IEEE Trans
+Biomed Eng 66(9):2546–2555. https://doi.org/10.1109/TBME.
+2019.2891676
+30. Tan C, Lv S, Dong F, Takei M (2019) Image reconstruction based
+on convolutional neural network for electrical resistance tomography. IEEE Sens J 19(1):196–204. https://doi.org/10.1109/JSEN.
+2018.2876411
+31. Rymarczyk T, Kłosowski G, Kozłowski E, Tchórzewski P (2019)
+Comparison of selected machine learning algorithms for industrial electrical tomography. Sensors 19(7):1521
+32. Rymarczyk T, Kłosowski G, Kozłowski E (2018) A non-destructive system based on electrical tomography and machine
+learning to analyze the moisture of buildings. Sensors 18(7):2285
+33. Husain Z, Liatsis P (2019) A neural network-based local
+decomposition approach for image reconstruction in electrical
+impedance tomography. In: 2019 IEEE International conference
+on imaging systems and techniques (IST), pp 1–6. IEEE
+34. Bianchessi A, Akamine RH, Duran GC, Tanabi N, Sato AK,
+Martins TC, Tsuzuki MS (2020) Electrical impedance tomography image reconstruction based on neural networks. IFAC
+PapersOnLine 53(2):15946–15951
+35. Fernández-Fuentes X, Mera D, Gómez A, Vidal-Franco I (2018)
+Towards a fast and accurate eit inverse problem solver: a machine
+learning approach. Electronics 7(12):422
+36. Zou H, Hastie T (2005) Regularization and variable selection via
+the elastic net. J Royal Stat Soc Ser B (statistical methodology)
+67(2):301–320
+37. Fix E, Hodges JL (1989) Discriminatory analysis. nonparametric
+discrimination: consistency properties. Int Stat Rev Revue Int de
+Statistique 57(3):238–247
+38. Breiman L (2001) Random forests. Machine Learn 45(1):5–32
+39. Freund Y, Schapire RE et al (1996) Experiments with a new
+boosting algorithm. In: Icml, vol 96, pp 148–156. Citeseer
+40. Friedman JH (2001) Greedy function approximation: a gradient
+boosting machine. Annals of statistics 1189–1232
+41. Silva OL, Lima RG, Martins TC, de Moura FS, Tavares RS,
+Tsuzuki MSG (2017) Influence of current injection pattern and
+electric potential measurement strategies in electrical impedance
+tomography. Control Eng Practice 58:276–286
+42. Bergstra J, Bengio Y (2012) Random search for hyper-parameter
+optimization. J Machine Learn Res 13(Feb):281–305
+43. Carletta J (1996) Assessing agreement on classification tasks: the
+kappa statistic. Comput Linguistics 22(2):249–254
+Publisher’s Note Springer Nature remains neutral with regard to
+jurisdictional claims in published maps and institutional affiliations.
+
+123
+
+

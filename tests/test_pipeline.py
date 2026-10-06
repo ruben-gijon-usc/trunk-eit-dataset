@@ -10,9 +10,10 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.models import Anomaly, Circle, Pos, SimpleTrunk
 from src.pipeline import PipelineConfig, generate_random_trunk
 from src.simulation import generate_grid, grid2png
+
+from src.models import Anomaly, Circle, Pos, SimpleTrunk
 
 
 class TestGrid:
