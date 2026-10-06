@@ -74,6 +74,10 @@ def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Set random seeds for reproducibility (generates the exact same dataset every run)
+    random.seed(42)
+    np.random.seed(42)
+
     N_SAMPLES = 10_220
     N_ELECTRODES = 16
     GRID_RESOLUTION = 64
