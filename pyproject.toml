@@ -8,6 +8,7 @@ dependencies = [
     "matplotlib",
     "httpx",
     "torch>=2.14.0",
+    "scipy>=1.15.3",
 ]
 
 [project.optional-dependencies]

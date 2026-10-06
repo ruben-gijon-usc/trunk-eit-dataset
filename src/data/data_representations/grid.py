@@ -12,15 +12,14 @@ def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
     """
     Generate a 2D conductivity grid from a Trunk domain model, 
     strictly respecting the physical aspect ratio.
-
-    Args:
-        trunk: Domain model containing trunk geometry and anomalies.
-        resolution: Number of pixels along the longest axis (default 128).
-
-    Returns:
-        2D numpy array of shape (ny, nx) containing conductivity values.
     """
     x_min, x_max, y_min, y_max = trunk.get_bounds()
+    
+    # Add 5% padding so the trunk doesn't touch the edges of the image
+    padx = (x_max - x_min) * 0.05
+    pady = (y_max - y_min) * 0.05
+    x_min, x_max = x_min - padx, x_max + padx
+    y_min, y_max = y_min - pady, y_max + pady
 
     width = x_max - x_min
     height = y_max - y_min
@@ -45,6 +44,40 @@ def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
 
     return grid
 
+
+def generate_mask(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
+    """
+    Generate a 2D boolean mask from a Trunk domain model, strictly based on its physical boundary.
+    """
+    x_min, x_max, y_min, y_max = trunk.get_bounds()
+
+    padx = (x_max - x_min) * 0.05
+    pady = (y_max - y_min) * 0.05
+    x_min, x_max = x_min - padx, x_max + padx
+    y_min, y_max = y_min - pady, y_max + pady
+
+    width = x_max - x_min
+    height = y_max - y_min
+
+    if width > height:
+        nx = resolution
+        ny = max(1, int(resolution * (height / width)))
+    else:
+        nx = max(1, int(resolution * (width / height)))
+        ny = resolution
+
+    x = np.linspace(x_min, x_max, nx)
+    y = np.linspace(y_min, y_max, ny)
+    X, Y = np.meshgrid(x, y)
+
+    def evaluate_mask(px: float, py: float) -> float:
+        pos = Pos.from_cartesian(px, py)
+        return float(trunk.base.contains(pos))
+
+    vectorized_eval = np.vectorize(evaluate_mask)
+    mask = vectorized_eval(X, Y)
+
+    return mask
 
 def grid2png(
     grid: NDArray[np.float64], path: str, vmin: float | None = None, vmax: float | None = None

@@ -1,203 +1,74 @@
-# Trunk EIT Dataset
+# 🌲 Trunk EIT Dataset Generator
 
-Automated pipeline for generating ML datasets for Electrical Impedance Tomography (EIT) applied to tree trunks. Translates geometric models into conductivity grids and runs forward simulations.
+Un marco avanzado para la simulación y generación de datasets sintéticos de **Tomografía de Impedancia Eléctrica (EIT)** aplicados a la inspección no invasiva de troncos de madera. 
 
-**Tech Stack**: Python 3.10+, `uv` (package manager), EIDORS (EIT simulation via Octave)
+Este proyecto mejora el estado del arte (como el presentado en *Aller et al., 2022*) mediante la inyección de estocasticidad biológica, modelado armónico de anomalías (defectos de la madera) y generación rigurosa de máscaras y matrices espaciales para entrenar modelos de Deep Learning modernos.
 
----
-
-## Quick Start
-
-```bash
-uv sync                 # Install dependencies
-```
+## ✨ Características Principales
+- **Anomalías Orgánicas:** Uso de coeficientes de series de Fourier para generar defectos de formas irregulares naturales, escapando de los círculos o elipses perfectos clásicos.
+- **Variabilidad Estocástica:** Parametrización basada en distribuciones lógicas (Poisson para cantidad de anomalías, Log-Normal para su tamaño). Ningún tronco es idéntico a otro.
+- **Simulador EIDORS Dinámico:** Comunicación ultra-rápida en formato binario (`.mat`) entre Python y Octave. Soporte dinámico para ajustar la densidad de la malla, cantidad de electrodos (8, 16, 32) y distintos patrones de estimulación (`adjacent`, `opposite`).
+- **Deep Learning Ready:** Exportación de rejillas densas de conductividad (64x64) y extracción de máscaras físicas perfectas basadas puramente en la topología matemática (aislando el ruido de la conductividad o fallos por huecos).
 
 ---
 
-## Project Structure
+## 🏗️ Arquitectura del Código (`src/`)
 
-```
-src/
-├── models/                    # Domain models (Pos, Shape, Anomaly, Trunk)
-├── data_representations/      # Grid generation (N x N matrices)
-│   └── grid.py
-├── simulation/                # Simulation re-exports (backward compat)
-│   └── grid.py -> data_representations.grid
-├── eidors/                   # EIDORS bridge and Octave scripts
-│   ├── bridge.py
-│   └── scripts/*.m
-├── pipeline/                 # Dataset orchestration
-└── monte-carlo/              # Monte Carlo utilities
+El núcleo del proyecto (`src/`) sigue principios de diseño orientados a dominio (DDD) separando estrictamente las matemáticas puras de su discretización visual.
 
-tests/
-├── test_pipeline.py
-└── test_eidors.py
-```
+* `src/models/`: **Dominio Matemático**. 
+  Contiene la topología base independiente de la malla. Define objetos espaciales (`Pos`), topologías abstractas (`Circle`, `Ellipse`, `Harmonic`), y compone el árbol mediante las clases `Anomaly` y `Trunk`. Todo el módulo implementa la interfaz `Serializable` para exportar el modelo a `.json` de forma nativa e invertible.
+* `src/data_representations/`: **Discretización e Imágenes**. 
+  Convierte los modelos matemáticos puros en matrices tensoriales utilizables por ML. El módulo `grid.py` rasteriza la conductividad evaluando funciones relativas, y extrae la máscara geométrica booleana (`generate_mask`) calculando los límites sub-pixel del tronco.
+* `src/forward_process/`: **Puente EIDORS / Octave**.
+  Orquesta la simulación del *Forward Problem*. El script `simulator.py` se encarga de crear subprocesos asíncronos aislados en carpetas temporales, pasando datos binariamente mediante SciPy a Octave y devolviendo resultados unificados en un `ForwardResult`.
+* `src/stochastic/`: **Generación Procedural**.
+  Fábricas (*Factories*) estadísticas. Modulan matemáticamente las distribuciones de los defectos naturales para conformar repositorios de miles de muestras sin sesgos lógicos.
 
 ---
 
-## Commands
+## 🚀 Generación de Datasets
 
-### Development
+El script principal de orquestación se encuentra en `scripts/dataset/generate_dataset.py`. Este script lee los parámetros interactivos de la terminal, inicializa la fábrica estocástica, coordina las simulaciones EIDORS y consolida los resultados eficientemente en disco.
+
+### Uso y Parámetros
+Puedes invocar el generador desde la terminal apoyándote en `uv run` para que gestione las dependencias (PyTorch, SciPy, Numpy, Matplotlib):
 
 ```bash
-uv sync                 # Install dependencies
-uv sync --dev           # Install dev dependencies (ruff)
-uv run ruff check .     # Lint code
-uv run ruff format .    # Format code
+uv run python scripts/dataset/generate_dataset.py [OPCIONES]
 ```
 
-### Testing
+| Parámetro | Tipo | Default | Descripción |
+| :--- | :--- | :--- | :--- |
+| `--samples` | `int` | `10220` | Cantidad total de troncos (simulaciones) a generar. |
+| `--electrodes` | `str` | `"16"` | Número de electrodos alrededor de la corteza. Acepta `"8"`, `"16"`, `"32"` o `"all"`. Si se usa `"all"`, evaluará los 3 conjuntos de electrodos consecutivamente para los mismos troncos, creando datasets directamente comparables. |
+| `--pattern` | `str` | `"all"` | Patrón de inyección/medición. Acepta `"adjacent"`, `"opposite"` o `"all"`. Si se elige `"all"`, la simulación calculará ambos espectros eléctricos sobre el *mismo* tronco y configuración espacial. |
+| `--seed` | `int` | `42` | Semilla de aleatoriedad. Garantiza la repetibilidad bit a bit de todo el dataset generado en distintos equipos. |
 
+### Ejemplo de Ejecución
 ```bash
-uv run pytest                 # Run all tests
-uv run pytest -v              # Run with verbose output
-uv run pytest tests/          # Run specific test directory
-uv run pytest tests/test_eidors.py -v  # Run specific test file
+uv run python scripts/dataset/generate_dataset.py --samples 500 --electrodes 32 --pattern all
 ```
+*Este comando generará 500 troncos únicos. Octave generará una malla densa para 32 electrodos y evaluará las corrientes inyectadas usando tanto un patrón adyacente como uno opuesto, todo dentro del mismo ciclo.*
 
-### Generate Dataset
+### Estructura de Salida
+Para ahorrar un inmenso espacio en disco y mantener la integridad comparativa en los experimentos, el pipeline comparte las matrices espaciales principales y genera subcarpetas exclusivas *solamente* para las variaciones de las mediciones eléctricas:
 
-```bash
-# Generate dataset with grid-only (no EIDORS)
-uv run python -c "
-from src.pipeline import run_pipeline, PipelineConfig
-config = PipelineConfig(num_samples=10, use_eidors=False)
-run_pipeline('dataset.npz', config, 'numpy')
-"
-
-# Generate dataset with EIDORS (grid + mesh)
-uv run python -c "
-from src.pipeline import run_pipeline, PipelineConfig
-config = PipelineConfig(num_samples=10, use_eidors=True)
-run_pipeline('dataset.h5', config, 'hdf5')
-"
+```text
+dataset/dataset_32e_all/
+├── json/               # Topología matemática pura de los troncos (para metadatos)
+├── grid/               # Imágenes PNG representativas y matrices NumPy base
+├── mesh/               # FEM Nodes y Elementos (exportación unificada compartida)
+├── voltages_adjacent/  # Tensores 1D con las mediciones en S/m (Patrón Adyacente)
+├── elem_data_adjacent/ # Respuestas crudas mapeadas del solver EIDORS 
+├── voltages_opposite/  # Tensores 1D con las mediciones en S/m (Patrón Opuesto)
+└── elem_data_opposite/ 
 ```
 
 ---
 
-## Utilities
+## 🧠 Entrenamiento y Modelos (`training/`)
 
-### Grid Generation (N x N matrices)
-
-```python
-from src.models import Trunk, Anomaly, Pos, Circle
-from src.simulation.grid import generate_grid, grid2png
-
-# Create trunk model
-trunk = Trunk(
-    radius=1.0,
-    base_conductivity=0.1,
-    anomalies=[
-        Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.15), conductivity=0.5),
-    ]
-)
-
-# Generate N x N conductivity grid
-grid = generate_grid(trunk, resolution=128)
-
-# Save as PNG
-grid2png(grid, 'conductivity.png')
-```
-
-### EIDORS Forward Simulation (Mesh-based FEM)
-
-```python
-from src.eidors.bridge import run_eidors_simulation
-from src.models import Trunk, Anomaly, Pos, Circle
-
-trunk = Trunk(
-    radius=1.0,
-    base_conductivity=1.0,
-    anomalies=[
-        Anomaly(shape=Circle(center=Pos(r=0.3, phi=0.0), radius=0.15), conductivity=0.5),
-    ]
-)
-
-result = run_eidors_simulation(trunk, n_electrodes=16)
-
-print(f"Voltages: {result.voltages.shape}")  # (208,)
-print(f"Nodes: {result.mesh.nodes.shape}")  # (1564, 2)
-print(f"Elements: {result.mesh.elems.shape}")  # (2943, 3)
-print(f"Elem data: {result.elem_data.shape}")  # (2943,)
-```
-
-### Analytical Forward Solver (via EIDORS)
-
-```python
-from src.eidors.bridge import run_eidors_simulation
-from src.models import Trunk
-
-trunk = Trunk(radius=1.0, base_conductivity=0.1, anomalies=[])
-
-result = run_eidors_simulation(trunk, n_electrodes=16)
-print(f"Voltages: {result.voltages.shape}")  # (208,)
-```
-
-### Pipeline Configuration
-
-```python
-from src.pipeline import PipelineConfig, run_pipeline
-
-config = PipelineConfig(
-    num_samples=1000,         # Number of samples
-    grid_resolution=128,       # Grid resolution
-    trunk_radius=1.0,         # Trunk radius (m)
-    base_conductivity=0.1,    # Base conductivity (S/m)
-    anomaly_conductivity_range=(0.01, 0.5),  # Random anomaly conductivity range
-    num_anomalies_range=(1, 3),   # Random number of anomalies
-    anomaly_radius_range=(0.1, 0.4),  # Random anomaly radius range
-    use_eidors=True,          # Include EIDORS mesh data
-    n_electrodes=16,          # Number of electrodes
-)
-
-# Run pipeline
-samples = run_pipeline('output.h5', config, 'hdf5')
-```
-
----
-
-## Testing Examples
-
-### Run all tests
-```bash
-uv run pytest -v
-```
-
-### Run specific test file
-```bash
-uv run pytest tests/test_eidors.py -v
-```
-
-### Run specific test function
-```bash
-uv run pytest tests/test_eidors.py::TestEIDORSBridge::test_run_eidors_simulation_with_anomaly -v
-```
-
-### Run with coverage
-```bash
-uv run pytest --cov=src --cov-report=term-missing
-```
-
----
-
-## Output Formats
-
-| Format | Description | Extension |
-|--------|-------------|-----------|
-| `numpy` | NumPy archive with arrays | `.npz` |
-| `hdf5` | HDF5 file with all data | `.h5` / `.hdf5` |
-| `json` | JSON with all data | `.json` |
-
-### Dataset Structure
-
-```python
-{
-    'voltages': np.array,           # Grid voltages (N, 1456)
-    'conductivity_maps': np.array,  # Grid conductivity (N, 128, 128)
-    'mesh_voltages': np.array,      # EIDORS voltages (N, 208)
-    'mesh_elem_data': np.array,     # Element conductivities (N, 2943)
-    'mesh_nodes': np.array,         # Mesh nodes (N, 1564, 2)
-    'mesh_elems': np.array,         # Mesh elements (N, 2943, 3)
-}
-```
+La carpeta `training/` incluye un robusto pipeline de ML/PyTorch listo para ingerir estos datasets.
+* **`eit_dataset.py`**: DataLoader dinámico. Recrea las matrices de conductividad a demanda, extrae las máscaras geométricas y permite cargar un patrón eléctrico específico con `pattern="adjacent"`.
+* **`train_utils.py`**: Bucle de entrenamiento agnóstico y universal, inyectando auto-evaluación métrica de 2D (SSIM, Error de Posición, DICE). Excluye automáticamente el "aire" durante el cálculo gracias a la inyección de la máscara del Dataset, evitando que el fondo infle artificialmente las precisiones del modelo.

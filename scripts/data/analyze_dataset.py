@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 # Resolver la ruta raíz del proyecto para encontrar la carpeta 'dataset'
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 import matplotlib.pyplot as plt
 import numpy as np

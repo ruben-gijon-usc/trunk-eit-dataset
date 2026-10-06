@@ -25,14 +25,14 @@
 %   elem_data.txt — element conductivities [E × 1]
 %   voltages.txt  — boundary voltage measurements [M × 1]
 
-function run_forward(n_electrodes, grid_path, x_min, x_max, y_min, y_max, fallback_cond, out_dir)
+function run_forward(n_electrodes, pattern_str, grid_path, x_min, x_max, y_min, y_max, fallback_cond, out_dir)
     % --- 1. Initialise EIDORS ------------------------------------------------
     % mfilename('fullpath') is reliable even when called via addpath from a driver
     % NOTE: addpath is already set by the Python driver before calling this func.
     startup_eidors();
 
     % --- 2. Build FEM model --------------------------------------------------
-    [~, img] = create_model(n_electrodes);
+    [~, img] = create_model(n_electrodes, pattern_str);
 
     % --- 3. Assign conductivity from grid ------------------------------------
     img = assign_conductivity(img, grid_path, x_min, x_max, y_min, y_max, fallback_cond);
@@ -45,8 +45,11 @@ function run_forward(n_electrodes, grid_path, x_min, x_max, y_min, y_max, fallba
     end
 
     % --- 5. Write outputs ----------------------------------------------------
-    dlmwrite(fullfile(out_dir, 'nodes.txt'),     img.fwd_model.nodes, ' ');
-    dlmwrite(fullfile(out_dir, 'elems.txt'),     img.fwd_model.elems, ' ');
-    dlmwrite(fullfile(out_dir, 'elem_data.txt'), img.elem_data,        ' ');
-    dlmwrite(fullfile(out_dir, 'voltages.txt'),  vh.meas,              ' ');
+    out_file = fullfile(out_dir, 'results.mat');
+    nodes = img.fwd_model.nodes;
+    elems = img.fwd_model.elems;
+    elem_data = img.elem_data;
+    voltages = vh.meas;
+    
+    save('-v7', out_file, 'nodes', 'elems', 'elem_data', 'voltages');
 end

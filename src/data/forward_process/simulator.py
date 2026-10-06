@@ -14,6 +14,7 @@ import tempfile
 from dataclasses import dataclass
 
 import numpy as np
+import scipy.io as sio
 from numpy.typing import NDArray
 
 from ..data_representations.grid import generate_grid
@@ -63,6 +64,7 @@ def simulate_forward_process(
     trunk: Trunk,
     resolution: int = 128,
     n_electrodes: int = 16,
+    pattern: str = "adjacent",
     octave_timeout: int = 300,
 ) -> ForwardResult | None:
     """Run the complete EIT forward process for a Trunk model.
@@ -78,6 +80,7 @@ def simulate_forward_process(
         trunk:           Domain model (geometry + conductivities).
         resolution:      Grid resolution (pixels along the longest axis).
         n_electrodes:    Number of EIT surface electrodes.
+        pattern:         Measurement pattern ('adjacent', 'opposite', etc.).
         octave_timeout:  Maximum seconds to wait for the Octave subprocess.
 
     Returns:
@@ -94,8 +97,8 @@ def simulate_forward_process(
     # Step 2 — Run scripts/run_forward.m via Octave subprocess
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
-        grid_path = os.path.join(tmpdir, "grid.txt")
-        np.savetxt(grid_path, grid, fmt="%.8f")
+        grid_path = os.path.join(tmpdir, "grid.mat")
+        sio.savemat(grid_path, {"grid": grid})
 
         startup_m = os.path.join(_SCRIPTS_DIR, "startup_eidors.m")
         driver = "\n".join(
@@ -106,6 +109,7 @@ def simulate_forward_process(
                 "startup_eidors();",
                 "run_forward(",
                 f"    {n_electrodes},",
+                f"    '{pattern}',",
                 f"    '{grid_path}',",
                 f"    {x_min}, {x_max},",
                 f"    {y_min}, {y_max},",
@@ -132,15 +136,16 @@ def simulate_forward_process(
         # ------------------------------------------------------------------
         # Step 3 — Read back outputs written by run_forward.m
         # ------------------------------------------------------------------
-        voltages_path = os.path.join(tmpdir, "voltages.txt")
-        if not os.path.exists(voltages_path):
-            print("[forward_process] voltages.txt not written — simulation failed.")
+        results_path = os.path.join(tmpdir, "results.mat")
+        if not os.path.exists(results_path):
+            print("[forward_process] results.mat not written — simulation failed.")
             return None
 
-        voltages = np.loadtxt(voltages_path)
-        nodes = np.loadtxt(os.path.join(tmpdir, "nodes.txt"))
-        elems = np.loadtxt(os.path.join(tmpdir, "elems.txt")).astype(np.int32)
-        elem_data = np.loadtxt(os.path.join(tmpdir, "elem_data.txt"))
+        data = sio.loadmat(results_path)
+        voltages = data['voltages'].squeeze()
+        nodes = data['nodes']
+        elems = data['elems'].astype(np.int32)
+        elem_data = data['elem_data'].squeeze()
 
         eit_result = EITResult(
             voltages=voltages,

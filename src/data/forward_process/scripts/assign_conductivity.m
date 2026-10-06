@@ -24,7 +24,8 @@ function img_out = assign_conductivity(img, grid_path, x_min, x_max, y_min, y_ma
     end
 
     % Load the conductivity grid produced by Python
-    grid_vals = load(grid_path);   % size: [ny, nx]
+    data = load(grid_path);
+    grid_vals = data.grid;   % size: [ny, nx]
     [ny, nx]  = size(grid_vals);
 
     % Build the physical coordinate axes matching the Python linspace
