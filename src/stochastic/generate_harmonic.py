@@ -90,8 +90,11 @@ class StochasticTrunkFactory:
 
     def _get_random_harmonic(self, trunk_radius: float, pos: Pos, max_attempts: int = 50) -> Harmonic:
         """Generates an organic shape with Rejection Sampling."""
-        # Exponential distribution for size: lots of small anomalies, rarely massive ones.
-        r0 = random.expovariate(1.0 / self.anomaly_scale)
+        # Log-normal distribution for size: avoids a massive spike at the minimum value (0.01)
+        # Using anomaly_scale as the median of the distribution.
+        mu = math.log(self.anomaly_scale)
+        sigma = 0.4
+        r0 = random.lognormvariate(mu, sigma)
         r0 = max(0.01, min(r0, trunk_radius * 0.8)) # Clamp to sane values
 
         # Pick a random degree of complexity for this specific anomaly

@@ -8,9 +8,14 @@ Generates random trunks via StochasticTrunkFactory and saves:
   - mesh/nodes.npy, mesh/elems.npy — shared FEM mesh (saved once)
 """
 
+import sys
 import json
 import random
 from pathlib import Path
+
+# Fix python path to allow importing 'src' from the parent directory
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,13 +35,13 @@ def get_dataset(n: int) -> list[Trunk]:
 
     factory = PaperTrunkFactory(
         trunk_radius_mu=1.0,
-        trunk_radius_sigma=0.0,
+        trunk_radius_sigma=0.1,    # Varia el tamaño del tronco
         base_cond_mu=1.0,
-        base_cond_sigma=0.0,
+        base_cond_sigma=0.1,       # Varia la conductividad de la madera sana
         wet_cond_mu=100.0,
-        wet_cond_sigma=0.0,
-        propagation_modes=["Linear"],
-        anomaly_scale=0.25
+        wet_cond_sigma=25.0,       # Varia la conductividad de la anomalía (distribución normal)
+        propagation_modes=["Linear", "Cos"],
+        anomaly_scale=0.25         # Tamaño mediano de la anomalía
     )
     return [factory.generate() for _ in range(n)]
 
@@ -82,7 +87,7 @@ if __name__ == "__main__":
     N_ELECTRODES = 16
     GRID_RESOLUTION = 64
 
-    base_path = Path("dataset")
+    base_path = PROJECT_ROOT / "dataset"
     for sub in ("grid", "json", "voltages", "elem_data", "mesh"):
         (base_path / sub).mkdir(parents=True, exist_ok=True)
 
