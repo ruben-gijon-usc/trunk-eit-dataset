@@ -4,9 +4,9 @@ startup_eidors();
 run_forward(
     16,
     'opposite',
-    '/tmp/tmpacir3j70/grid.mat',
-    -1.054191708149918, 1.054191708149918,
-    -1.054191708149918, 1.054191708149918,
-    1.0444842679342092,
-    '/tmp/tmpacir3j70'
+    '/tmp/tmpe3zou1my/grid.mat',
+    -1.0, 1.0,
+    -1.0, 1.0,
+    0.8672163877271393,
+    '/tmp/tmpe3zou1my'
 );

@@ -2,12 +2,17 @@ import torch
 import torch.nn.functional as F
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 
+import sys
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+from scripts.data.config import GROUND_TRUTH_THRESHOLD, MAX_CONDUCTIVITY
 
 class EITMetricsEvaluator:
-    def __init__(self, threshold=0.5, data_range: float = 1.0, device='cuda' if torch.cuda.is_available() else 'cpu'):
+    def __init__(self, threshold=GROUND_TRUTH_THRESHOLD, data_range: float = MAX_CONDUCTIVITY, device='cuda' if torch.cuda.is_available() else 'cpu'):
+        self.device = device
         self.ssim_metric = StructuralSimilarityIndexMeasure(data_range=data_range).to(self.device)
         self.threshold = threshold
-        self.device = device
 
     def rmse(self, preds: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor = None) -> torch.Tensor:
         if mask is not None:
@@ -24,8 +29,8 @@ class EITMetricsEvaluator:
             preds_bin = preds_bin * mask
             targets_bin = targets_bin * mask
 
-        preds_flat = preds_bin.view(preds.size(0), -1)
-        targets_flat = targets_bin.view(targets.size(0), -1)
+        preds_flat = preds_bin.reshape(preds.size(0), -1)
+        targets_flat = targets_bin.reshape(targets.size(0), -1)
 
         intersection = (preds_flat * targets_flat).sum(dim=1)
         union = preds_flat.sum(dim=1) + targets_flat.sum(dim=1)
@@ -34,14 +39,6 @@ class EITMetricsEvaluator:
         iou = (intersection + 1e-6) / (union - intersection + 1e-6)
 
         return dice.mean(), iou.mean()
-
-    def accuracy(self, preds: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor = None):
-        preds_bin = (preds > self.threshold).float()
-        targets_bin = (targets > self.threshold).float()
-
-        if mask is not None:
-            preds_bin = preds_bin * mask
-            targets_bin = targets_bin * mask
 
     def position_error(self, preds: torch.Tensor, targets: torch.Tensor, mask: torch.Tensor = None):
         B, C, H, W = preds.shape
@@ -77,12 +74,7 @@ class EITMetricsEvaluator:
         return self.ssim_metric(preds, targets)
 
 
-def compute_classification_metrics(preds: torch.Tensor, targets: torch.Tensor, threshold: float = 0.05):
-    """
-    Computes classification metrics for predicted grid vs target grid based on a conductivity threshold.
-    Values strictly above the threshold are considered Class 1 (Anomaly).
-    Returns basic metrics: (Accuracy, Precision, Recall, F1 Score).
-    """
+def compute_classification_metrics(preds: torch.Tensor, targets: torch.Tensor, threshold: float = GROUND_TRUTH_THRESHOLD):
     p_class = (preds > threshold).bool()
     t_class = (targets > threshold).bool()
 
@@ -94,4 +86,5 @@ def compute_classification_metrics(preds: torch.Tensor, targets: torch.Tensor, t
     accuracy = (tp + tn) / (tp + fp + fn + tn + 1e-8)
     precision = tp / (tp + fp + 1e-8)
     recall = tp / (tp + fn + 1e-8)
+    f1 = 2 * (precision * recall) / (precision + recall + 1e-8)
     return float(accuracy), float(precision), float(recall), float(f1)

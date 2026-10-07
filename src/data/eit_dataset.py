@@ -10,9 +10,10 @@ class EITDataset(Dataset):
     PyTorch Dataset for EIT trunk datasets.
     Loads voltage readings (inputs) and raw numpy grids/masks (targets).
     """
-    def __init__(self, dataset_dir: str | Path, flatten_grid: bool = False, pattern: Literal["adjacent", "opposite"] = None):
+    def __init__(self, dataset_dir: str | Path, flatten_grid: bool = False, pattern: Literal["adjacent", "opposite"] = None, target_type: Literal["grid", "elem_data"] = "grid"):
         self.dataset_dir = Path(dataset_dir)
         self.flatten_grid = flatten_grid
+        self.target_type = target_type
 
         # Set Inputs directory based on pattern
         if pattern is not None:
@@ -23,14 +24,14 @@ class EITDataset(Dataset):
             self.voltages_dir = self.dataset_dir / "inputs/voltages"
 
         # Set Targets directory
-        self.grid_dir = self.dataset_dir / "targets/grid"
+        self.target_dir = self.dataset_dir / f"targets/{target_type}"
         self.mask_dir = self.dataset_dir / "targets/mask"
 
         # Discover all valid samples
         self.valid_indices = []
         for v_file in self.voltages_dir.glob("*.npy"):
             idx = v_file.stem
-            if (self.grid_dir / f"{idx}.npy").exists() and (self.mask_dir / f"{idx}.npy").exists():
+            if (self.target_dir / f"{idx}.npy").exists():
                 self.valid_indices.append(idx)
 
         # Ensure determinism in data loading
@@ -47,18 +48,21 @@ class EITDataset(Dataset):
         voltage_tensor = torch.tensor(voltage_arr, dtype=torch.float32)
 
         # 2. Load pre-computed targets directly
-        grid_arr = np.load(self.grid_dir / f"{idx}.npy")
-        mask_arr = np.load(self.mask_dir / f"{idx}.npy")
-
-        grid_tensor = torch.tensor(grid_arr, dtype=torch.float32)
-        mask_tensor = torch.tensor(mask_arr, dtype=torch.float32)
+        target_arr = np.load(self.target_dir / f"{idx}.npy")
+        target_tensor = torch.tensor(target_arr, dtype=torch.float32)
         
-        if self.flatten_grid:
-            grid_tensor = grid_tensor.flatten()
-            mask_tensor = mask_tensor.flatten()
-        else:
-            # Formato imagen: (Canal, Alto, Ancho)
-            grid_tensor = grid_tensor.unsqueeze(0)
-            mask_tensor = mask_tensor.unsqueeze(0)
+        if self.target_type == "grid":
+            mask_arr = np.load(self.mask_dir / f"{idx}.npy")
+            mask_tensor = torch.tensor(mask_arr, dtype=torch.float32)
             
-        return voltage_tensor, grid_tensor, mask_tensor
+            if self.flatten_grid:
+                target_tensor = target_tensor.flatten()
+                mask_tensor = mask_tensor.flatten()
+            else:
+                target_tensor = target_tensor.unsqueeze(0)
+                mask_tensor = mask_tensor.unsqueeze(0)
+        else:
+            # For elem_data, mask is just a vector of 1s (all mesh elements are valid wood by definition of FEM)
+            mask_tensor = torch.ones_like(target_tensor)
+            
+        return voltage_tensor, target_tensor, mask_tensor
