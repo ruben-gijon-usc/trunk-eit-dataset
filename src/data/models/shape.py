@@ -96,19 +96,19 @@ class Circle(Shape):
         return self.radius
 
     def to_dict(self) -> dict:
-        return {"shape_type": self.shape_type, "center": self.center.to_dict(), "radius": self.radius}
+        return {
+            "shape_type": self.shape_type,
+            "center": self.center.to_dict(),
+            "radius": self.radius,
+        }
 
     def get_area(self) -> float:
         return math.pi * self.radius * self.radius
 
     def get_bounds(self, n_points: int = None) -> tuple[float, float, float, float]:
         cx, cy = self.center.to_cartesian()
-        return (
-            cx - self.radius,
-            cx + self.radius,
-            cy - self.radius,
-            cy + self.radius
-        )
+        return (cx - self.radius, cx + self.radius, cy - self.radius, cy + self.radius)
+
 
 class Ellipse(Shape):
     """Ellipse shape with rotation."""
@@ -125,9 +125,16 @@ class Ellipse(Shape):
 
     @classmethod
     def from_dict(cls, data):
-        center_data, rx, ry, rotation = data.get("center"), data.get("rx"), data.get("ry"), data.get("rotation")
+        center_data, rx, ry, rotation = (
+            data.get("center"),
+            data.get("rx"),
+            data.get("ry"),
+            data.get("rotation"),
+        )
         if center_data is None or rx is None or ry is None or rotation is None:
-            raise ValueError("Missing required keys for Ellipse: 'cx', 'cy', 'rx', 'ry', 'rotation'")
+            raise ValueError(
+                "Missing required keys for Ellipse: 'cx', 'cy', 'rx', 'ry', 'rotation'"
+            )
         center = Pos.from_dict(center_data)
         return Ellipse(center, rx, ry, rotation)
 
@@ -156,8 +163,12 @@ class Ellipse(Shape):
     def get_bounds(self, n_points: int = None) -> tuple[float, float, float, float]:
         cx, cy = self.center.to_cartesian()
 
-        dx = math.sqrt((self.rx * math.cos(self.rotation))**2 + (self.ry * math.sin(self.rotation))**2)
-        dy = math.sqrt((self.rx * math.sin(self.rotation))**2 + (self.ry * math.cos(self.rotation))**2)
+        dx = math.sqrt(
+            (self.rx * math.cos(self.rotation)) ** 2 + (self.ry * math.sin(self.rotation)) ** 2
+        )
+        dy = math.sqrt(
+            (self.rx * math.sin(self.rotation)) ** 2 + (self.ry * math.cos(self.rotation)) ** 2
+        )
 
         return cx - dx, cx + dx, cy - dy, cy + dy
 
@@ -180,9 +191,15 @@ class Harmonic(Shape):
 
     @classmethod
     def from_dict(cls, data):
-        center_data, base_radius, harmonics = data.get("center"), data.get("base_radius"), data.get("harmonics")
+        center_data, base_radius, harmonics = (
+            data.get("center"),
+            data.get("base_radius"),
+            data.get("harmonics"),
+        )
         if center_data is None or base_radius is None or harmonics is None:
-            raise ValueError("Missing required keys for Harmonic: 'cx', 'cy', 'base_radius', 'harmonics'")
+            raise ValueError(
+                "Missing required keys for Harmonic: 'cx', 'cy', 'base_radius', 'harmonics'"
+            )
         center = Pos.from_dict(center_data)
         return Harmonic(center, base_radius, harmonics)
 
@@ -210,20 +227,15 @@ class Harmonic(Shape):
         return True
 
     def get_area(self) -> float:
-        base_area = math.pi * (self.base_radius ** 2)
+        base_area = math.pi * (self.base_radius**2)
 
-        harmonic_area = (math.pi / 2.0) * sum(
-            a**2 + b**2 for a, b in self.harmonics
-        )
+        harmonic_area = (math.pi / 2.0) * sum(a**2 + b**2 for a, b in self.harmonics)
         return base_area + harmonic_area
 
 
 class ShapeFactory:
     ACCEPTED_SHAPES: tuple[Shape] = (Circle, Ellipse, Harmonic)
-    SHAPES: dict[str, type[Shape]] = {
-        s.SHAPE_TYPE: s
-        for s in ACCEPTED_SHAPES
-    }
+    SHAPES: dict[str, type[Shape]] = {s.SHAPE_TYPE: s for s in ACCEPTED_SHAPES}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Shape":

@@ -142,10 +142,10 @@ def simulate_forward_process(
             return None
 
         data = sio.loadmat(results_path)
-        voltages = data['voltages'].squeeze()
-        nodes = data['nodes']
-        elems = data['elems'].astype(np.int32)
-        elem_data = data['elem_data'].squeeze()
+        voltages = data["voltages"].squeeze()
+        nodes = data["nodes"]
+        elems = data["elems"].astype(np.int32)
+        elem_data = data["elem_data"].squeeze()
 
         eit_result = EITResult(
             voltages=voltages,

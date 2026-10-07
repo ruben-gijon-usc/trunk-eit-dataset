@@ -10,11 +10,11 @@ from ..models import Pos, Trunk
 
 def generate_grid(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
     """
-    Generate a 2D conductivity grid from a Trunk domain model, 
+    Generate a 2D conductivity grid from a Trunk domain model,
     strictly respecting the physical aspect ratio.
     """
     x_min, x_max, y_min, y_max = trunk.get_bounds()
-    
+
     # Add 5% padding so the trunk doesn't touch the edges of the image
     padx = (x_max - x_min) * 0.05
     pady = (y_max - y_min) * 0.05
@@ -78,6 +78,7 @@ def generate_mask(trunk: Trunk, resolution: int = 128) -> NDArray[np.float64]:
     mask = vectorized_eval(X, Y)
 
     return mask
+
 
 def grid2png(
     grid: NDArray[np.float64], path: str, vmin: float | None = None, vmax: float | None = None

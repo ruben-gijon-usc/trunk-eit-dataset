@@ -1,14 +1,18 @@
 import collections
+from collections.abc import Callable
+from typing import Any
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from typing import Dict, Any, Optional, Callable
 
-from src.training.early_stopping import EarlyStopping
 from scripts.data.config import GROUND_TRUTH_THRESHOLD
+from src.training.early_stopping import EarlyStopping
+
 
 def default_metrics_fn(preds, targets, threshold=GROUND_TRUTH_THRESHOLD, mask=None):
     return {}
+
 
 def train_model(
     model: nn.Module,
@@ -20,21 +24,21 @@ def train_model(
     patience: int = 5,
     anomaly_threshold: float = GROUND_TRUTH_THRESHOLD,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    metrics_fn: Optional[Callable] = None
-) -> Dict[str, Any]:
+    metrics_fn: Callable | None = None,
+) -> dict[str, Any]:
     """
     Función genérica para entrenar cualquier modelo de reconstrucción EIT usando métricas dinámicas.
     Ahora incorpora Strict Masking en la Función de Pérdida (Agent Pitfall #5).
     """
     model = model.to(device)
     early_stopper = EarlyStopping(patience=patience, restore_best_weights=True)
-    
+
     if metrics_fn is None:
         metrics_fn = default_metrics_fn
-        
+
     history = collections.defaultdict(list)
     print(f"Iniciando entrenamiento en {device} con Early Stopping (paciencia={patience})...")
-    
+
     for epoch in range(max_epochs):
         # ----------------------
         # Fase de Entrenamiento
@@ -42,14 +46,14 @@ def train_model(
         model.train()
         train_loss = 0.0
         train_metrics_sum = collections.defaultdict(float)
-        
+
         for batch_data in train_loader:
             voltages, targets = batch_data[0].to(device), batch_data[1].to(device)
             masks = batch_data[2].to(device) if len(batch_data) > 2 else None
-            
+
             optimizer.zero_grad()
             preds = model(voltages)
-            
+
             # STRICT MASKING ON LOSS (AGENTS.md)
             if masks is not None:
                 # Si el modelo saca (B, C, H, W) y target es (B, H, W), ajustamos dimensiones si hace falta
@@ -58,16 +62,16 @@ def train_model(
                 preds_masked = preds * masks
                 targets_masked = targets * masks
                 try:
-                        loss = criterion(preds_masked, targets_masked, masks)
-                    except TypeError:
-                        loss = criterion(preds_masked, targets_masked)
+                    loss = criterion(preds_masked, targets_masked, masks)
+                except TypeError:
+                    loss = criterion(preds_masked, targets_masked)
             else:
                 loss = criterion(preds, targets)
-                
+
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
-            
+
             # Cálculo dinámico de métricas custom por batch
             batch_metrics = metrics_fn(preds, targets, threshold=anomaly_threshold, mask=masks)
             for k, v in batch_metrics.items():
@@ -78,7 +82,7 @@ def train_model(
         history["train_loss"].append(train_loss)
         for k, v in train_metrics_sum.items():
             history[f"train_{k}"].append(v / len(train_loader))
-        
+
         # ----------------------
         # Fase de Validación
         # ----------------------
@@ -90,9 +94,9 @@ def train_model(
             for batch_data in val_loader:
                 voltages, targets = batch_data[0].to(device), batch_data[1].to(device)
                 masks = batch_data[2].to(device) if len(batch_data) > 2 else None
-                
+
                 preds = model(voltages)
-                
+
                 # STRICT MASKING ON LOSS (AGENTS.md)
                 if masks is not None:
                     preds_masked = preds * masks
@@ -103,7 +107,7 @@ def train_model(
                         loss = criterion(preds_masked, targets_masked)
                 else:
                     loss = criterion(preds, targets)
-                    
+
                 val_loss += loss.item()
 
                 batch_metrics = metrics_fn(preds, targets, threshold=anomaly_threshold, mask=masks)
@@ -128,14 +132,16 @@ def train_model(
         elif "train_ssim" in history:
             t_metric = f"[SSIM: {history['train_ssim'][-1]:.4f}]"
             v_metric = f"[SSIM: {history['val_ssim'][-1]:.4f}]"
-        
-        print(f"Epoch {epoch+1:02d}/{max_epochs} | "
-              f"Train Loss: {train_loss:.6f} {t_metric} | "
-              f"Val Loss: {val_loss:.6f} {v_metric}")
+
+        print(
+            f"Epoch {epoch + 1:02d}/{max_epochs} | "
+            f"Train Loss: {train_loss:.6f} {t_metric} | "
+            f"Val Loss: {val_loss:.6f} {v_metric}"
+        )
 
         early_stopper(val_loss, model)
         if early_stopper.early_stop:
-            print(f"🛑 Early stopping activado. Entrenamiendo detenido en la época {epoch+1}.")
+            print(f"🛑 Early stopping activado. Entrenamiendo detenido en la época {epoch + 1}.")
             break
 
     print("✅ Entrenamiento completado (se han restaurado los mejores pesos).")

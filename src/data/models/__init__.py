@@ -16,6 +16,5 @@ __all__ = [
     "Harmonic",
     "Anomaly",
     "Trunk",
-    "SimpleTrunk"
+    "SimpleTrunk",
 ]
-

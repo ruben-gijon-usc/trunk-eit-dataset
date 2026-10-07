@@ -1,74 +1,87 @@
-# 🌲 Trunk EIT Dataset Generator
+# 🌲 Trunk EIT Dataset & Inverse Problem Models
 
-Un marco avanzado para la simulación y generación de datasets sintéticos de **Tomografía de Impedancia Eléctrica (EIT)** aplicados a la inspección no invasiva de troncos de madera. 
+Pipeline completo de simulación estocástica y Machine Learning para resolver el Problema Inverso de Tomografía de Impedancia Eléctrica (EIT) en troncos de madera con pudriciones internas.
 
-Este proyecto mejora el estado del arte (como el presentado en *Aller et al., 2022*) mediante la inyección de estocasticidad biológica, modelado armónico de anomalías (defectos de la madera) y generación rigurosa de máscaras y matrices espaciales para entrenar modelos de Deep Learning modernos.
-
-## ✨ Características Principales
-- **Anomalías Orgánicas:** Uso de coeficientes de series de Fourier para generar defectos de formas irregulares naturales, escapando de los círculos o elipses perfectos clásicos.
-- **Variabilidad Estocástica:** Parametrización basada en distribuciones lógicas (Poisson para cantidad de anomalías, Log-Normal para su tamaño). Ningún tronco es idéntico a otro.
-- **Simulador EIDORS Dinámico:** Comunicación ultra-rápida en formato binario (`.mat`) entre Python y Octave. Soporte dinámico para ajustar la densidad de la malla, cantidad de electrodos (8, 16, 32) y distintos patrones de estimulación (`adjacent`, `opposite`).
-- **Deep Learning Ready:** Exportación de rejillas densas de conductividad (64x64) y extracción de máscaras físicas perfectas basadas puramente en la topología matemática (aislando el ruido de la conductividad o fallos por huecos).
+Este repositorio está arquitecturado siguiendo **Domain-Driven Design (DDD)** separando la generación de datos físicos simulados (`src/data`) del proceso puro de Deep Learning (`src/training`).
 
 ---
 
-## 🏗️ Arquitectura del Código (`src/`)
+## 🛠️ Instalación
 
-El núcleo del proyecto (`src/`) sigue principios de diseño orientados a dominio (DDD) separando estrictamente las matemáticas puras de su discretización visual.
-
-* `src/models/`: **Dominio Matemático**. 
-  Contiene la topología base independiente de la malla. Define objetos espaciales (`Pos`), topologías abstractas (`Circle`, `Ellipse`, `Harmonic`), y compone el árbol mediante las clases `Anomaly` y `Trunk`. Todo el módulo implementa la interfaz `Serializable` para exportar el modelo a `.json` de forma nativa e invertible.
-* `src/data_representations/`: **Discretización e Imágenes**. 
-  Convierte los modelos matemáticos puros en matrices tensoriales utilizables por ML. El módulo `grid.py` rasteriza la conductividad evaluando funciones relativas, y extrae la máscara geométrica booleana (`generate_mask`) calculando los límites sub-pixel del tronco.
-* `src/forward_process/`: **Puente EIDORS / Octave**.
-  Orquesta la simulación del *Forward Problem*. El script `simulator.py` se encarga de crear subprocesos asíncronos aislados en carpetas temporales, pasando datos binariamente mediante SciPy a Octave y devolviendo resultados unificados en un `ForwardResult`.
-* `src/stochastic/`: **Generación Procedural**.
-  Fábricas (*Factories*) estadísticas. Modulan matemáticamente las distribuciones de los defectos naturales para conformar repositorios de miles de muestras sin sesgos lógicos.
-
----
-
-## 🚀 Generación de Datasets
-
-El script principal de orquestación se encuentra en `scripts/dataset/generate_dataset.py`. Este script lee los parámetros interactivos de la terminal, inicializa la fábrica estocástica, coordina las simulaciones EIDORS y consolida los resultados eficientemente en disco.
-
-### Uso y Parámetros
-Puedes invocar el generador desde la terminal apoyándote en `uv run` para que gestione las dependencias (PyTorch, SciPy, Numpy, Matplotlib):
+Se utiliza `uv` como gestor de paquetes y dependencias ultra-rápido de Python:
 
 ```bash
-uv run python scripts/dataset/generate_dataset.py [OPCIONES]
-```
-
-| Parámetro | Tipo | Default | Descripción |
-| :--- | :--- | :--- | :--- |
-| `--samples` | `int` | `10220` | Cantidad total de troncos (simulaciones) a generar. |
-| `--electrodes` | `str` | `"16"` | Número de electrodos alrededor de la corteza. Acepta `"8"`, `"16"`, `"32"` o `"all"`. Si se usa `"all"`, evaluará los 3 conjuntos de electrodos consecutivamente para los mismos troncos, creando datasets directamente comparables. |
-| `--pattern` | `str` | `"all"` | Patrón de inyección/medición. Acepta `"adjacent"`, `"opposite"` o `"all"`. Si se elige `"all"`, la simulación calculará ambos espectros eléctricos sobre el *mismo* tronco y configuración espacial. |
-| `--seed` | `int` | `42` | Semilla de aleatoriedad. Garantiza la repetibilidad bit a bit de todo el dataset generado en distintos equipos. |
-
-### Ejemplo de Ejecución
-```bash
-uv run python scripts/dataset/generate_dataset.py --samples 500 --electrodes 32 --pattern all
-```
-*Este comando generará 500 troncos únicos. Octave generará una malla densa para 32 electrodos y evaluará las corrientes inyectadas usando tanto un patrón adyacente como uno opuesto, todo dentro del mismo ciclo.*
-
-### Estructura de Salida
-Para ahorrar un inmenso espacio en disco y mantener la integridad comparativa en los experimentos, el pipeline comparte las matrices espaciales principales y genera subcarpetas exclusivas *solamente* para las variaciones de las mediciones eléctricas:
-
-```text
-dataset/dataset_32e_all/
-├── json/               # Topología matemática pura de los troncos (para metadatos)
-├── grid/               # Imágenes PNG representativas y matrices NumPy base
-├── mesh/               # FEM Nodes y Elementos (exportación unificada compartida)
-├── voltages_adjacent/  # Tensores 1D con las mediciones en S/m (Patrón Adyacente)
-├── elem_data_adjacent/ # Respuestas crudas mapeadas del solver EIDORS 
-├── voltages_opposite/  # Tensores 1D con las mediciones en S/m (Patrón Opuesto)
-└── elem_data_opposite/ 
+uv sync                 # Instala dependencias del proyecto
 ```
 
 ---
 
-## 🧠 Entrenamiento y Modelos (`training/`)
+## 💾 1. Generación de Datos (Fase de Simulación)
 
-La carpeta `training/` incluye un robusto pipeline de ML/PyTorch listo para ingerir estos datasets.
-* **`eit_dataset.py`**: DataLoader dinámico. Recrea las matrices de conductividad a demanda, extrae las máscaras geométricas y permite cargar un patrón eléctrico específico con `pattern="adjacent"`.
-* **`train_utils.py`**: Bucle de entrenamiento agnóstico y universal, inyectando auto-evaluación métrica de 2D (SSIM, Error de Posición, DICE). Excluye automáticamente el "aire" durante el cálculo gracias a la inyección de la máscara del Dataset, evitando que el fondo infle artificialmente las precisiones del modelo.
+El generador crea geometrías estocásticas de madera y hongos a partir de armónicos y resuelve el problema físico (*Forward Problem*) conectando con EIDORS vía GNU Octave.
+
+### 1.1 Generar el Dataset de Entrenamiento (Train/Val)
+Genera el conjunto de desarrollo que utilizarán los modelos.
+```bash
+uv run python scripts/data/generate_dataset.py --samples 5000 --electrodes 16 --pattern all
+```
+
+### 1.2 Generar los Datasets de Testeo (Benchmarking)
+Para demostrar la robustez física de las redes, generamos dos datasets de prueba independientes:
+* **Test ID (In-Distribution):** Sigue las mismas reglas geométricas que el entrenamiento.
+* **Test OOD (Out-Of-Distribution):** Multi-anomalías extremas, bordes puntiagudos (altos armónicos).
+```bash
+# Generar Test ID (Misma distribución)
+uv run python scripts/data/generate_test_dataset.py --mode id --samples 1000 --electrodes 16
+
+# Generar Test OOD (Stress Test Geométrico)
+uv run python scripts/data/generate_test_dataset.py --mode ood --samples 1000 --electrodes 16
+```
+
+---
+
+## 🤖 2. Entrenamiento Deep Neural Networks (DNN)
+
+La arquitectura de ejecución consta de 2 pasos estrictos para evitar *Data Leakage*. (Nota: los voltajes de entrada se **normalizan automáticamente (Z-Score)** por defecto al cargar el dataset para asegurar convergencia estable).
+
+### Paso 1: Búsqueda de Hiperparámetros (Optuna)
+Busca la mejor estructura (capas paramétricas) y learning rates optimizando una función de pérdida específica.
+```bash
+# Tuning usando MSE clásico
+uv run python scripts/training/dnn/tune_dnn.py --dataset_dir dataset/dataset_16e_adjacent --loss mse --trials 20
+
+# Tuning usando Loss Híbrida (RMSE Espacial + SSIM)
+uv run python scripts/training/dnn/tune_dnn.py --dataset_dir dataset/dataset_16e_adjacent --loss hybrid --trials 20
+```
+
+### Paso 2: Validación 5-Fold y Modelo Final
+Lee el JSON generado en el Paso 1, ejecuta una validación cruzada y entrena el modelo final con el 100% de los datos guardando el `.pt`.
+```bash
+uv run python scripts/training/dnn/evaluate_dnn.py --dataset_dir dataset/dataset_16e_adjacent --params_file scripts/training/dnn/best_params_dnn_hybrid.json
+```
+
+---
+
+## 🌳 3. Entrenamiento XGBoost (Baseline)
+
+Modelo base de Machine Learning tradicional. Predecir los 4096 elementos del *Grid* es intensivo en CPU, por lo que su `tune` restringe el número de ramas lógicas para lograr entrenamientos resolubles.
+
+### Paso 1: Búsqueda de Hiperparámetros (Optuna)
+```bash
+uv run python scripts/training/xgboost/tune_xgboost.py --dataset_dir dataset/dataset_16e_adjacent --trials 10
+```
+
+### Paso 2: Validación 5-Fold y Modelo Final
+Evalúa el árbol usando las mismas métricas que las DNNs (convirtiendo internamente a tensores 2D).
+```bash
+uv run python scripts/training/xgboost/evaluate_xgboost.py --dataset_dir dataset/dataset_16e_adjacent --params_file scripts/training/xgboost/best_params_xgboost.json
+```
+
+---
+
+## 📊 Arquitectura del Repositorio
+
+* `src/data/` — Lógica de generación, máscaras 2D y conexión con EIDORS (Octave).
+* `src/training/` — Clases puras de ML (PyTorch Dataset, Métricas, `criterion/` para Losses, EarlyStopping).
+* `scripts/` — Ejecutables orquestadores (*Entrypoints*). Donde lanzas los comandos.
+* `dataset/` — Carpeta autogenerada con los tensores `.npy` y los *Ground Truth*.

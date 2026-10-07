@@ -1,41 +1,40 @@
 import argparse
-import random
-import numpy as np
 import json
 import math
-import matplotlib.pyplot as plt
+import random
+import sys
 from pathlib import Path
 
-import sys
+import matplotlib.pyplot as plt
+import numpy as np
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.models.trunk import Trunk, SimpleTrunk, Anomaly
 from src.data.models.harmonics import Harmonic, Pos
-from src.data.forward_process.simulator import simulate_forward_process, ForwardResult
-from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
-from src.data.data_representations.grid import generate_mask
 
 # Importamos la configuración original para mantener los límites físicos (S/m) idénticos
-from scripts.data.config import (
-    COND_BASE_MIN, COND_BASE_MAX,
-    COND_ANOMALY_MIN, COND_ANOMALY_MAX
-)
+from scripts.data.config import COND_ANOMALY_MAX, COND_ANOMALY_MIN, COND_BASE_MAX, COND_BASE_MIN
 
 # Importamos el generador original para el Test In-Distribution
 from scripts.data.generate_dataset import get_dataset as get_id_dataset
+from src.data.data_representations.grid import generate_mask
+from src.data.forward_process.simulator import ForwardResult, simulate_forward_process
+from src.data.models.trunk import Anomaly, SimpleTrunk, Trunk
+from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
 
 # ---------------------------------------------------------------------------
 # Out-Of-Distribution (OOD) Dataset Factory
 # ---------------------------------------------------------------------------
-# Mantenemos las conductividades idénticas al entrenamiento, pero forzamos 
+# Mantenemos las conductividades idénticas al entrenamiento, pero forzamos
 # que la topología (forma geométrica, cantidad y tamaño) sea inédita.
 
 OOD_ANOMALIES_MIN = 3
 OOD_ANOMALIES_MAX = 4
 OOD_ANOMALY_RADIUS_MIN = 0.05
-OOD_ANOMALY_RADIUS_MAX = 0.15 # Anomalías más pequeñas pero más numerosas
-OOD_MAX_HARMONIC = 7 # Geometrías más puntiagudas y complejas
+OOD_ANOMALY_RADIUS_MAX = 0.15  # Anomalías más pequeñas pero más numerosas
+OOD_MAX_HARMONIC = 7  # Geometrías más puntiagudas y complejas
+
 
 def get_ood_dataset(n: int) -> list[Trunk]:
     class OODFactory(StochasticTrunkFactory):
@@ -52,11 +51,13 @@ def get_ood_dataset(n: int) -> list[Trunk]:
             phi = random.uniform(0, 2 * math.pi)
             return Pos(r=r, phi=phi)
 
-        def _get_random_harmonic(self, trunk_radius: float, pos: Pos, max_attempts: int = 50) -> Harmonic:
+        def _get_random_harmonic(
+            self, trunk_radius: float, pos: Pos, max_attempts: int = 50
+        ) -> Harmonic:
             r0 = random.uniform(OOD_ANOMALY_RADIUS_MIN, OOD_ANOMALY_RADIUS_MAX)
             r0 = max(0.01, min(r0, trunk_radius * 0.8))
             degree = random.randint(3, self.max_harmonic_degree)
-            
+
             for _ in range(max_attempts):
                 harmonics = []
                 for k in range(1, degree + 1):
@@ -73,7 +74,7 @@ def get_ood_dataset(n: int) -> list[Trunk]:
         def generate(self) -> Trunk:
             trunk_radius = self._get_random_trunk_radius()
             base_conductivity = random.uniform(COND_BASE_MIN, COND_BASE_MAX)
-            
+
             n_anomalies = self._poisson_sample(0)
             anomalies = []
             for _ in range(n_anomalies):
@@ -82,11 +83,14 @@ def get_ood_dataset(n: int) -> list[Trunk]:
                 cond = random.uniform(COND_ANOMALY_MIN, COND_ANOMALY_MAX)
                 prop = random.choice(self.propagation_modes)
                 anomalies.append(Anomaly(shape, cond, prop))
-                
-            return SimpleTrunk.create(radius=trunk_radius, base_conductivity=base_conductivity, anomalies=anomalies)
+
+            return SimpleTrunk.create(
+                radius=trunk_radius, base_conductivity=base_conductivity, anomalies=anomalies
+            )
 
     factory = OODFactory(propagation_modes=["Linear", "Cos"], max_harmonic_degree=OOD_MAX_HARMONIC)
     return [factory.generate() for _ in range(n)]
+
 
 # ---------------------------------------------------------------------------
 # Save helpers
@@ -107,20 +111,42 @@ def save_sample(result: ForwardResult, i: int, base_path: Path) -> None:
     rgba_image[mask == 0] = [1.0, 1.0, 1.0, 1.0]
     plt.imsave(base_path / f"visualizations/grid/sample_{i:04d}.png", rgba_image, origin="lower")
 
+
 def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
     np.save(base_path / "mesh/nodes.npy", result.eit_result.mesh.nodes)
     np.save(base_path / "mesh/elems.npy", result.eit_result.mesh.elems)
+
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generador de Datasets de TESTEO EIT (ID / OOD)")
-    parser.add_argument("--mode", type=str, required=True, choices=["id", "ood"], help="Modo: 'id' (misma distribución) o 'ood' (topología compleja)")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        required=True,
+        choices=["id", "ood"],
+        help="Modo: 'id' (misma distribución) o 'ood' (topología compleja)",
+    )
     parser.add_argument("--samples", type=int, default=1000, help="Número de muestras a generar")
-    parser.add_argument("--electrodes", type=str, default="16", choices=["8", "16", "32", "all"], help="Número de electrodos")
-    parser.add_argument("--pattern", type=str, default="adjacent", choices=["adjacent", "opposite", "all"], help="Patrón de estimulación")
-    parser.add_argument("--seed", type=int, default=999, help="Semilla aleatoria (distinta al entrenamiento)")
+    parser.add_argument(
+        "--electrodes",
+        type=str,
+        default="16",
+        choices=["8", "16", "32", "all"],
+        help="Número de electrodos",
+    )
+    parser.add_argument(
+        "--pattern",
+        type=str,
+        default="adjacent",
+        choices=["adjacent", "opposite", "all"],
+        help="Patrón de estimulación",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=999, help="Semilla aleatoria (distinta al entrenamiento)"
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -131,7 +157,7 @@ if __name__ == "__main__":
 
     GRID_RESOLUTION = 64
     base_paths = {}
-    mesh_saved = {e: False for e in electrode_list}
+    mesh_saved = dict.fromkeys(electrode_list, False)
 
     # Creación de carpetas con sufijo dinámico
     suffix = "test_id" if args.mode == "id" else "test_ood"
@@ -146,28 +172,32 @@ if __name__ == "__main__":
         (bp / "visualizations/grid").mkdir(parents=True, exist_ok=True)
         base_paths[e] = bp
 
-    print(f"🔬 Generando {args.samples} troncos de TEST ({args.mode.upper()}) para {args.electrodes} electrodos ({args.pattern})...")
-    
+    print(
+        f"🔬 Generando {args.samples} troncos de TEST ({args.mode.upper()}) para {args.electrodes} electrodos ({args.pattern})..."
+    )
+
     if args.mode == "id":
         dataset = get_id_dataset(args.samples)
     else:
         dataset = get_ood_dataset(args.samples)
-        
+
     failed = 0
 
     for i, trunk in enumerate(dataset):
         print(f"  [{i + 1}/{args.samples}] Simulando...", end=" ", flush=True)
         trunk_failed = False
-        
+
         for e in electrode_list:
             bp = base_paths[e]
             results = {}
             for p in patterns:
-                res = simulate_forward_process(trunk, resolution=GRID_RESOLUTION, n_electrodes=e, pattern=p)
+                res = simulate_forward_process(
+                    trunk, resolution=GRID_RESOLUTION, n_electrodes=e, pattern=p
+                )
                 if res is None:
                     break
                 results[p] = res
-                
+
             if len(results) != len(patterns):
                 trunk_failed = True
                 break
@@ -179,7 +209,9 @@ if __name__ == "__main__":
 
             save_sample(first_res, i, bp)
             for p in patterns:
-                np.save(bp / f"inputs/voltages_{p}/sample_{i:04d}.npy", results[p].eit_result.voltages)
+                np.save(
+                    bp / f"inputs/voltages_{p}/sample_{i:04d}.npy", results[p].eit_result.voltages
+                )
 
         if trunk_failed:
             print("FAILED — saltando")
@@ -188,4 +220,6 @@ if __name__ == "__main__":
             print("✓")
 
     ok = args.samples - failed
-    print(f"\n✅ Terminado Test Dataset ({args.mode.upper()}): {ok}/{args.samples} muestras generadas con éxito.")
+    print(
+        f"\n✅ Terminado Test Dataset ({args.mode.upper()}): {ok}/{args.samples} muestras generadas con éxito."
+    )

@@ -131,9 +131,7 @@ class EarlyStopping:
 
         if model_improved:
             self._improvement_achieved(value, model)
-            self._log(
-                f"Epoch {self.epoch} | Improved best score to {value:.6f}. Reset patience."
-            )
+            self._log(f"Epoch {self.epoch} | Improved best score to {value:.6f}. Reset patience.")
             return
 
         self.epochs_without_improvement += 1

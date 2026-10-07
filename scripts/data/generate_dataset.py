@@ -8,38 +8,44 @@ Generates random trunks via StochasticTrunkFactory and saves:
   - mesh/nodes.npy, mesh/elems.npy — shared FEM mesh (saved once)
 """
 
-import sys
+import argparse
 import json
 import random
-import argparse
+import sys
 from pathlib import Path
 
 # Fix python path to allow importing 'src' from the parent directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+import math
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-import math
-
+from src.data.data_representations.grid import generate_mask
 from src.data.forward_process import ForwardResult, simulate_forward_process
-from src.data.models import Trunk, Pos, Anomaly, SimpleTrunk
+from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
 from src.data.models.shape import Harmonic
 from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
-from src.data.data_representations.grid import generate_mask
 
 from .config import (
-    TRUNK_RADIUS_MIN, TRUNK_RADIUS_MAX,
-    ANOMALIES_MIN, ANOMALIES_MAX,
-    ANOMALY_RADIUS_MIN, ANOMALY_RADIUS_MAX,
-    COND_BASE_MIN, COND_BASE_MAX,
-    COND_ANOMALY_MIN, COND_ANOMALY_MAX
+    ANOMALIES_MAX,
+    ANOMALIES_MIN,
+    ANOMALY_RADIUS_MAX,
+    ANOMALY_RADIUS_MIN,
+    COND_ANOMALY_MAX,
+    COND_ANOMALY_MIN,
+    COND_BASE_MAX,
+    COND_BASE_MIN,
+    TRUNK_RADIUS_MAX,
+    TRUNK_RADIUS_MIN,
 )
 
 # ---------------------------------------------------------------------------
 # Dataset factories
 # ---------------------------------------------------------------------------
+
 
 def get_dataset(n: int) -> list[Trunk]:
     class UniformMCFactory(StochasticTrunkFactory):
@@ -56,11 +62,13 @@ def get_dataset(n: int) -> list[Trunk]:
             phi = random.uniform(0, 2 * math.pi)
             return Pos(r=r, phi=phi)
 
-        def _get_random_harmonic(self, trunk_radius: float, pos: Pos, max_attempts: int = 50) -> Harmonic:
+        def _get_random_harmonic(
+            self, trunk_radius: float, pos: Pos, max_attempts: int = 50
+        ) -> Harmonic:
             r0 = random.uniform(ANOMALY_RADIUS_MIN, ANOMALY_RADIUS_MAX)
-            r0 = max(0.01, min(r0, trunk_radius * 0.8)) # Sanity clamp
+            r0 = max(0.01, min(r0, trunk_radius * 0.8))  # Sanity clamp
             degree = random.randint(1, self.max_harmonic_degree)
-            
+
             for _ in range(max_attempts):
                 harmonics = []
                 for k in range(1, degree + 1):
@@ -77,7 +85,7 @@ def get_dataset(n: int) -> list[Trunk]:
         def generate(self) -> Trunk:
             trunk_radius = self._get_random_trunk_radius()
             base_conductivity = random.uniform(COND_BASE_MIN, COND_BASE_MAX)
-            
+
             n_anomalies = self._poisson_sample(0)
             anomalies = []
             for _ in range(n_anomalies):
@@ -86,8 +94,10 @@ def get_dataset(n: int) -> list[Trunk]:
                 cond = random.uniform(COND_ANOMALY_MIN, COND_ANOMALY_MAX)
                 prop = random.choice(self.propagation_modes)
                 anomalies.append(Anomaly(shape, cond, prop))
-                
-            return SimpleTrunk.create(radius=trunk_radius, base_conductivity=base_conductivity, anomalies=anomalies)
+
+            return SimpleTrunk.create(
+                radius=trunk_radius, base_conductivity=base_conductivity, anomalies=anomalies
+            )
 
     factory = UniformMCFactory(propagation_modes=["Linear", "Cos"], max_harmonic_degree=5)
     return [factory.generate() for _ in range(n)]
@@ -96,6 +106,7 @@ def get_dataset(n: int) -> list[Trunk]:
 # ---------------------------------------------------------------------------
 # Save helpers
 # ---------------------------------------------------------------------------
+
 
 def save_sample(result: ForwardResult, i: int, base_path: Path) -> None:
     """Persist all outputs for one sample."""
@@ -119,6 +130,7 @@ def save_sample(result: ForwardResult, i: int, base_path: Path) -> None:
     rgba_image[mask == 0] = [1.0, 1.0, 1.0, 1.0]
     plt.imsave(base_path / f"visualizations/grid/{i}.png", rgba_image, origin="lower")
 
+
 def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
     """Save the shared FEM mesh."""
     np.save(base_path / "mesh/nodes.npy", result.eit_result.mesh.nodes)
@@ -128,6 +140,7 @@ def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
         f"{len(result.eit_result.mesh.elems)} elements"
     )
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -135,8 +148,20 @@ def save_mesh_once(result: ForwardResult, base_path: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generador de Datasets EIT")
     parser.add_argument("--samples", type=int, default=10220, help="Número de muestras a generar")
-    parser.add_argument("--electrodes", type=str, default="16", choices=["8", "16", "32", "all"], help="Número de electrodos")
-    parser.add_argument("--pattern", type=str, default="all", choices=["adjacent", "opposite", "all"], help="Patrón de estimulación")
+    parser.add_argument(
+        "--electrodes",
+        type=str,
+        default="16",
+        choices=["8", "16", "32", "all"],
+        help="Número de electrodos",
+    )
+    parser.add_argument(
+        "--pattern",
+        type=str,
+        default="all",
+        choices=["adjacent", "opposite", "all"],
+        help="Patrón de estimulación",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria")
     args = parser.parse_args()
 
@@ -148,12 +173,12 @@ if __name__ == "__main__":
 
     GRID_RESOLUTION = 64
     base_paths = {}
-    mesh_saved = {e: False for e in electrode_list}
+    mesh_saved = dict.fromkeys(electrode_list, False)
 
     # Preparamos la nueva arquitectura de carpetas
     for e in electrode_list:
         bp = PROJECT_ROOT / "dataset" / f"dataset_{e}e_{args.pattern}"
-        
+
         # Mesh
         (bp / "mesh").mkdir(parents=True, exist_ok=True)
         # Targets
@@ -165,26 +190,30 @@ if __name__ == "__main__":
         # Metadata & Visualizations
         (bp / "metadata").mkdir(parents=True, exist_ok=True)
         (bp / "visualizations/grid").mkdir(parents=True, exist_ok=True)
-        
+
         base_paths[e] = bp
 
-    print(f"🌲 Generando {args.samples} troncos para {args.electrodes} electrodos ({args.pattern})...")
+    print(
+        f"🌲 Generando {args.samples} troncos para {args.electrodes} electrodos ({args.pattern})..."
+    )
     dataset = get_dataset(args.samples)
     failed = 0
 
     for i, trunk in enumerate(dataset):
         print(f"  [{i + 1}/{args.samples}] Simulando...", end=" ", flush=True)
         trunk_failed = False
-        
+
         for e in electrode_list:
             bp = base_paths[e]
             results = {}
             for p in patterns:
-                res = simulate_forward_process(trunk, resolution=GRID_RESOLUTION, n_electrodes=e, pattern=p)
+                res = simulate_forward_process(
+                    trunk, resolution=GRID_RESOLUTION, n_electrodes=e, pattern=p
+                )
                 if res is None:
                     break
                 results[p] = res
-                
+
             if len(results) != len(patterns):
                 trunk_failed = True
                 break

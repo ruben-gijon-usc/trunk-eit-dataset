@@ -14,32 +14,26 @@ class StochasticTrunkFactory:
     def __init__(
         self,
         # Trunk Dimensions (Log-normal distribution)
-        trunk_radius_mu: float = 0.5,     # Mean radius (m)
+        trunk_radius_mu: float = 0.5,  # Mean radius (m)
         trunk_radius_sigma: float = 0.1,  # Standard deviation
-
         # Anomaly Counts (Poisson distribution)
         expected_anomalies: float = 4.0,  # Average number of anomalies per tree (lambda)
-
         # Anomaly Placement (Beta distribution for radius)
         # alpha=1, beta=1 -> Uniform area. alpha>1, beta=1 -> Near bark. alpha=1, beta>1 -> Near pith.
         pos_alpha: float = 1.5,
         pos_beta: float = 1.5,
-
         # Anomaly Size (Exponential distribution)
-        anomaly_scale: float = 0.08,      # Average size of an anomaly (m)
-
+        anomaly_scale: float = 0.08,  # Average size of an anomaly (m)
         # Fourier/Harmonic Complexity
         max_harmonic_degree: int = 5,
         harmonic_sigma_base: float = 0.25,
-
         # Physical Properties (Gaussian distribution)
         base_cond_mu: float = 0.01,
         base_cond_sigma: float = 0.002,
         wet_cond_mu: float = 0.1,
         wet_cond_sigma: float = 0.02,
-
         max_cond: float = 0.5,
-        propagation_modes: list[Literal["Constant", "Linear", "Cos"]] | None = None
+        propagation_modes: list[Literal["Constant", "Linear", "Cos"]] | None = None,
     ):
         self.trunk_radius_mu = trunk_radius_mu
         self.trunk_radius_sigma = trunk_radius_sigma
@@ -59,7 +53,9 @@ class StochasticTrunkFactory:
         self.wet_cond_sigma = wet_cond_sigma
 
         # Defaulting to exclusively Constant as requested for the moment
-        self.propagation_modes = propagation_modes if propagation_modes is not None else ["Constant"]
+        self.propagation_modes = (
+            propagation_modes if propagation_modes is not None else ["Constant"]
+        )
 
     def _poisson_sample(self, lam: float) -> int:
         """Generates a random integer from a Poisson distribution (Knuth's algorithm)."""
@@ -74,10 +70,10 @@ class StochasticTrunkFactory:
     def _get_random_trunk_radius(self) -> float:
         """Lognormal distribution for strictly positive, natural biological sizing."""
         # Convert mean/var to lognormal mu/sigma
-        variance = self.trunk_radius_sigma ** 2
+        variance = self.trunk_radius_sigma**2
         mean = self.trunk_radius_mu
-        mu = math.log(mean ** 2 / math.sqrt(variance + mean ** 2))
-        sigma = math.sqrt(math.log(1 + (variance / mean ** 2)))
+        mu = math.log(mean**2 / math.sqrt(variance + mean**2))
+        sigma = math.sqrt(math.log(1 + (variance / mean**2)))
         return random.lognormvariate(mu, sigma)
 
     def _get_random_pos(self, trunk_radius: float) -> Pos:
@@ -88,14 +84,16 @@ class StochasticTrunkFactory:
         phi = random.uniform(0, 2 * math.pi)
         return Pos(r=r, phi=phi)
 
-    def _get_random_harmonic(self, trunk_radius: float, pos: Pos, max_attempts: int = 50) -> Harmonic:
+    def _get_random_harmonic(
+        self, trunk_radius: float, pos: Pos, max_attempts: int = 50
+    ) -> Harmonic:
         """Generates an organic shape with Rejection Sampling."""
         # Log-normal distribution for size: avoids a massive spike at the minimum value (0.01)
         # Using anomaly_scale as the median of the distribution.
         mu = math.log(self.anomaly_scale)
         sigma = 0.4
         r0 = random.lognormvariate(mu, sigma)
-        r0 = max(0.01, min(r0, trunk_radius * 0.8)) # Clamp to sane values
+        r0 = max(0.01, min(r0, trunk_radius * 0.8))  # Clamp to sane values
 
         # Pick a random degree of complexity for this specific anomaly
         degree = random.randint(1, self.max_harmonic_degree)
@@ -143,14 +141,9 @@ class StochasticTrunkFactory:
         n_anomalies = self._poisson_sample(self.expected_anomalies)
 
         # 3. Generate the internal defects
-        anomalies = [
-            self._get_random_anomaly(trunk_radius)
-            for _ in range(n_anomalies)
-        ]
+        anomalies = [self._get_random_anomaly(trunk_radius) for _ in range(n_anomalies)]
 
         # 4. Assemble
         return SimpleTrunk.create(
-            radius=trunk_radius,
-            base_conductivity=base_conductivity,
-            anomalies=anomalies
+            radius=trunk_radius, base_conductivity=base_conductivity, anomalies=anomalies
         )

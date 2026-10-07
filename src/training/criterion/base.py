@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
 
+
 class BaseEITLoss(nn.Module):
     """
     Clase base para todas las funciones de pérdida del problema EIT.
-    Maneja automáticamente el redimensionamiento de vectores aplanados a 
+    Maneja automáticamente el redimensionamiento de vectores aplanados a
     cuadrículas 2D (Grid) y la aplicación de máscaras booleanas.
     """
+
     def __init__(self):
         super().__init__()
 
@@ -30,13 +32,15 @@ class BaseEITLoss(nn.Module):
         preds = self._format_2d(preds)
         targets = self._format_2d(targets)
         masks = self._format_2d(masks)
-        
+
         if masks is not None:
             preds = preds * masks
             if targets is not None:
                 targets = targets * masks
-            
+
         return preds, targets, masks
 
-    def forward(self, preds: torch.Tensor, targets: torch.Tensor, masks: torch.Tensor = None) -> torch.Tensor:
+    def forward(
+        self, preds: torch.Tensor, targets: torch.Tensor, masks: torch.Tensor = None
+    ) -> torch.Tensor:
         raise NotImplementedError("Las subclases deben implementar forward(preds, targets, masks)")

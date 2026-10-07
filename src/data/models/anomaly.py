@@ -7,7 +7,12 @@ from .shape import Shape, ShapeFactory
 
 
 class Anomaly(Serializable):
-    def __init__(self, shape: Shape, conductivity: float, propagation_fn: Literal["Constant", "Linear", "Cos"] = "Constant"):
+    def __init__(
+        self,
+        shape: Shape,
+        conductivity: float,
+        propagation_fn: Literal["Constant", "Linear", "Cos"] = "Constant",
+    ):
         self.shape = shape
         self.conductivity = conductivity
         self.propagation_fn = propagation_fn
@@ -22,7 +27,11 @@ class Anomaly(Serializable):
         return Anomaly(shape, conductivity, propagation_fn)
 
     def to_dict(self) -> dict:
-        return {"shape": self.shape.to_dict(), "conductivity": self.conductivity, "propagation_fn": self.propagation_fn}
+        return {
+            "shape": self.shape.to_dict(),
+            "conductivity": self.conductivity,
+            "propagation_fn": self.propagation_fn,
+        }
 
     def contains(self, pos: Pos) -> bool:
         return self.shape.contains(pos)
@@ -37,5 +46,5 @@ class Anomaly(Serializable):
         if self.propagation_fn == "Linear":
             return (1 - r) * self.conductivity
         if self.propagation_fn == "Cos":
-            return math.cos(r * math.pi / 2.) * self.conductivity
+            return math.cos(r * math.pi / 2.0) * self.conductivity
         raise ValueError(f"Unkonw mode: {self.propagation_fn}")
