@@ -33,17 +33,17 @@ class DynamicDNN(nn.Module):
         return self.net(x)
 
 
-def grid_flattened_metrics_fn(preds, targets, masks=None):
+def grid_flattened_metrics_fn(preds, targets, threshold=GROUND_TRUTH_THRESHOLD, mask=None):
     if preds.dim() == 2:
         B = preds.size(0)
         size = int(preds.size(1) ** 0.5)
         p_2d = preds.view(B, 1, size, size)
         t_2d = targets.view(B, 1, size, size)
-        m_2d = masks.view(B, 1, size, size) if masks is not None else None
+        m_2d = mask.view(B, 1, size, size) if mask is not None else None
     else:
-        p_2d, t_2d, m_2d = preds, targets, masks
+        p_2d, t_2d, m_2d = preds, targets, mask
 
-    evaluator = EITMetricsEvaluator(threshold=GROUND_TRUTH_THRESHOLD, data_range=MAX_CONDUCTIVITY)
+    evaluator = EITMetricsEvaluator(threshold=threshold, data_range=MAX_CONDUCTIVITY)
     rmse_val = evaluator.rmse(p_2d, t_2d, m_2d).item()
     ssim_val = evaluator.ssim(p_2d, t_2d, m_2d).item()
     dice, iou = evaluator.dice_and_iou(p_2d, t_2d, m_2d)

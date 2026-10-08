@@ -47,6 +47,9 @@ class EITDataset(Dataset):
         # Ensure determinism in data loading
         self.valid_indices.sort(key=int)
 
+        if len(self.valid_indices) == 0:
+            raise FileNotFoundError(f"¡El dataset está vacío o la ruta es incorrecta! No se encontraron muestras válidas en: {self.dataset_dir.absolute()}")
+
     def __len__(self) -> int:
         return len(self.valid_indices)
 

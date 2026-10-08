@@ -32,7 +32,7 @@ def evaluate_on_test_set(model, dataset, device, test_name):
             masks = batch_data[2].to(device) if len(batch_data) > 2 else None
             
             preds = model(voltages)
-            batch_metrics = grid_flattened_metrics_fn(preds, targets, masks)
+            batch_metrics = grid_flattened_metrics_fn(preds, targets, mask=masks)
             for k, v in batch_metrics.items():
                 metrics_sum[k] += v
 
