@@ -11,7 +11,8 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.models.harmonics import Harmonic, Pos
+from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
+from src.data.models.shape import Harmonic
 
 # Importamos la configuración original para mantener los límites físicos (S/m) idénticos
 from scripts.data.config import COND_ANOMALY_MAX, COND_ANOMALY_MIN, COND_BASE_MAX, COND_BASE_MIN

@@ -29,7 +29,7 @@ from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
 from src.data.models.shape import Harmonic
 from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
 
-from .config import (
+from scripts.data.config import (
     ANOMALIES_MAX,
     ANOMALIES_MIN,
     ANOMALY_RADIUS_MAX,

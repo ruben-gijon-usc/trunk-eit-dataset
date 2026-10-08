@@ -13,7 +13,10 @@ Se utiliza `uv` como gestor de paquetes y dependencias ultra-rápido de Python:
 ```bash
 uv sync                 # Instala dependencias del proyecto
 ```
-
+### Testing
+```bash
+uv run python -m pytest -v
+```
 ---
 
 ## 💾 1. Generación de Datos (Fase de Simulación)
@@ -23,7 +26,7 @@ El generador crea geometrías estocásticas de madera y hongos a partir de armó
 ### 1.1 Generar el Dataset de Entrenamiento (Train/Val)
 Genera el conjunto de desarrollo que utilizarán los modelos.
 ```bash
-uv run python scripts/data/generate_dataset.py --samples 5000 --electrodes 16 --pattern all
+uv run python scripts/data/generate_dataset.py --samples 10000 --electrodes 16 --pattern all
 ```
 
 ### 1.2 Generar los Datasets de Testeo (Benchmarking)
