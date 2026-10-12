@@ -24,7 +24,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.data.data_representations.grid import generate_mask
-from src.data.forward_process import ForwardResult, simulate_forward_process
+from src.data.forward_process import (
+    ForwardResult,
+    check_eidors_available,
+    check_octave_installed,
+    simulate_forward_process,
+)
 from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
 from src.data.models.shape import Harmonic
 from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
@@ -164,6 +169,10 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria")
     args = parser.parse_args()
+
+    # Validar dependencias (Octave y EIDORS) antes de empezar a generar miles de muestras
+    octave_bin = check_octave_installed()
+    check_eidors_available(octave_bin)
 
     random.seed(args.seed)
     np.random.seed(args.seed)

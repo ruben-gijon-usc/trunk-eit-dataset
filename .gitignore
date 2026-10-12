@@ -1,6 +1,8 @@
 out/
 uv.lock
 /dataset/
+_driver.m
+vendor/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

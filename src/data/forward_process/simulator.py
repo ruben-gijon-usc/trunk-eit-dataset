@@ -17,11 +17,80 @@ import numpy as np
 import scipy.io as sio
 from numpy.typing import NDArray
 
+import shutil
+
 from ..data_representations.grid import generate_grid
 from ..models import Trunk
 
 # Directory that holds the .m scripts bundled with this package
 _SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts")
+
+
+def get_octave_binary() -> str | None:
+    """Find the Octave executable on the system ('octave-cli' or 'octave')."""
+    return shutil.which("octave-cli") or shutil.which("octave")
+
+
+def check_octave_installed() -> str:
+    """Verify that Octave is available in PATH, raising RuntimeError if not.
+
+    Returns:
+        The path to the Octave executable.
+
+    Raises:
+        RuntimeError: If neither 'octave-cli' nor 'octave' is installed or in PATH.
+    """
+    binary = get_octave_binary()
+    if binary is None:
+        raise RuntimeError(
+            "Octave is required for the forward EIT simulation, but neither 'octave-cli' nor "
+            "'octave' was found in your PATH.\n"
+            "Please install GNU Octave (e.g., 'sudo apt install octave' on Ubuntu/Debian, "
+            "or 'brew install octave' on macOS) and ensure it is available in PATH."
+        )
+    return binary
+
+
+def check_eidors_available(octave_bin: str | None = None) -> None:
+    """Verify that EIDORS can be initialized via Octave, raising RuntimeError if not.
+
+    Runs startup_eidors() in a minimal Octave invocation to ensure EIDORS is accessible
+    either through $EIDORS_PATH or vendor/eidors.
+
+    Raises:
+        RuntimeError: If Octave fails to initialize EIDORS.
+    """
+    if octave_bin is None:
+        octave_bin = check_octave_installed()
+
+    startup_m = os.path.join(_SCRIPTS_DIR, "startup_eidors.m")
+    test_cmd = (
+        f"run('{startup_m}'); "
+        f"addpath('{_SCRIPTS_DIR}'); "
+        "startup_eidors(); "
+        "disp('EIDORS_OK');"
+    )
+
+    try:
+        proc = subprocess.run(
+            [octave_bin, "--no-gui", "--quiet", "--eval", test_cmd],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Failed to execute Octave to test EIDORS: {exc}") from exc
+
+    if proc.returncode != 0 or "EIDORS_OK" not in proc.stdout:
+        err_msg = proc.stderr.strip() or proc.stdout.strip()
+        raise RuntimeError(
+            f"EIDORS initialization failed in Octave:\n{err_msg}\n\n"
+            "How to fix:\n"
+            "1. Download EIDORS from http://eidors3d.sourceforge.net/ (e.g. eidors-v3.12).\n"
+            "2. Set the EIDORS_PATH environment variable to the extracted folder:\n"
+            "   export EIDORS_PATH=/path/to/eidors-v3.12/eidors\n"
+            "   (Or place it in vendor/eidors inside the repository)."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -118,12 +187,17 @@ def simulate_forward_process(
                 ");",
             ]
         )
-        driver_path = os.path.join(_SCRIPTS_DIR, "_driver.m")
+        driver_path = os.path.join(tmpdir, "_driver.m")
         with open(driver_path, "w") as fh:
             fh.write(driver)
 
+        octave_bin = get_octave_binary()
+        if octave_bin is None:
+            print("[forward_process] 'octave' / 'octave-cli' not found in PATH. EIDORS simulation skipped.")
+            return None
+
         proc = subprocess.run(
-            ["octave-cli", "--no-gui", "--quiet", driver_path],
+            [octave_bin, "--no-gui", "--quiet", driver_path],
             capture_output=True,
             text=True,
             timeout=octave_timeout,

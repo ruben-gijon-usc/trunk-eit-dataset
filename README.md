@@ -8,11 +8,20 @@ Este repositorio está arquitecturado siguiendo **Domain-Driven Design (DDD)** s
 
 ## 🛠️ Instalación
 
-Se utiliza `uv` como gestor de paquetes y dependencias ultra-rápido de Python:
+1. **Requisitos del sistema**:
+   - Python 3.10+
+   - **GNU Octave** (para la simulación física directa de EIT):
+     ```bash
+     sudo apt install octave
+     ```
+   *(La librería EIDORS ya viene configurada dentro del repositorio en `vendor/eidors`).*
 
-```bash
-uv sync                 # Instala dependencias del proyecto
-```
+2. **Entorno Python**:
+   Se utiliza `uv` como gestor de paquetes y dependencias de Python:
+   ```bash
+   uv sync                 # Instala dependencias del proyecto
+   ```
+
 ### Testing
 ```bash
 uv run python -m pytest -v
