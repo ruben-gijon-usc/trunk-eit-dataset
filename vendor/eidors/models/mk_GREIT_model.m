@@ -1,0 +1,755 @@
+function [imdl, weight]= mk_GREIT_model( fmdl, radius, weight, options )
+% MK_GREIT_MODEL: make EIDORS inverse models using the GREIT approach
+%   [imdl, weight]= mk_GREIT_model( mdl, radius, weight, options )
+%
+% Output: 
+%   imdl   - GREIT inverse model
+%   weight - value of the weight paramater chosed to satisfy the prescribed
+%            noise figure (NF). See options.noise_figure below.
+%
+% Parameters:
+%   mdl    - fwd_model on which to do simulations, or
+%          - image
+%          - inv_model 
+%          - string specifying prepackaged models
+%
+%   is mdl.type == 'image' then the background conductivity of the image is used
+%   if mdl.type == 'inv_model' then the background conductivity in jacobian_bkgnd is used
+%
+%   radius - requested weighting matrix  (recommend 0.2 for 16 electrodes)
+%   weight - weighting matrix (weighting of noise vs signal). Can be empty
+%            options.noise_figure is specified
+%   options- structure with fields:
+%     imgsz         - [xsz ysz] reconstructed image size in pixels 
+%                     (default: [32 32])
+%     square_pixels - forces square pixels if 1 (default: 0)
+%     Nsim          - number of training points (default: 1000)
+%     distr         - distribution of training points:
+%         0 -> original (as per GREITv1)
+%         1 -> random, centre-heavy 
+%         2 -> random, uniform
+%         3 -> fixed, uniform (default)
+%     target_size - size of simulated targets as proportion of mesh radius
+%         (default: 0.02). Can be specified as [min_size max_size] for 
+%         random variation
+%     target_plane - the (mean) height z at which simulation targets are
+%         placed. This controls the image plane. Default: mean electrode
+%         height
+%     target_offset - maximum allowed vertical displacement from the
+%         target_plane (default: 0). Can be specified as
+%         [down_offset up_offset].
+%     noise_figure - the noise figure (NF) to achieve. Overwrites weight 
+%         which will be optimised to achieve the target NF.     
+%     noise_figure_targets - circular target(s) to use for NF calculation
+%         as an array of coordinates and radius xyzr [4xN] (default: single
+%         target at the center at average electrode height with radius of
+%         opt.target_size. Note that multiple targets are simultaneously
+%         simulated in a single measurement, meaning they should not
+%         overlap.
+%     image_SNR - an alternative method (apart from the NF) to specify the 
+%         noise performance of the algorithm to achieve.    
+%     image_SNR_targets - circular targets used for image SNR calculation 
+%         see xyzr_targets in calc_image_SNR for more information
+%     extra_noise - extra noise samples (such as electrode movement)
+%     desired_solution_fn - specify a function to calculate the desired 
+%         image. It must have the signature:
+%         D = my_function( xyc, radius, options); 
+%         See CALC_GREIT_RM for details.
+%     keep_model_components  - if true, stores additional data of 
+%         reconstruction matrix computation to be used later on, 
+%         e.g. for faulty electrode compensation
+%     keep_intermediate_results (DEPRECATED) - like keep_model_components, but calculates expensive parameters. For backward compatibility
+%     show_NF_chosen - Show the NF value chosen
+%
+% NOTE
+%   currently weighting matrix must be scalar
+%               
+% Examples
+%   fmdl = mk_library_model('adult_male_16el');
+%   fmdl.stimulation = mk_stim_patterns(16,1,'{ad}','{ad}',{},1);
+%   fmdl.normalize_measurements = 1;
+%   imdl = mk_GREIT_model(fmdl,0.25,5); % uses weight 5
+%   OR
+%   opt.noise_figure = 0.5; 
+%   imdl = mk_GREIT_model(fmdl,0.25,[],opt); % optimises weight for NF=0.5
+%
+% CITATION_REQUEST:
+% AUTHOR: A Adler et al.
+% TITLE: GREIT: a unified approach to 2D linear EIT reconstruction of lung
+% images
+% JOURNAL: Phys Meas
+% YEAR: 2009
+% VOL: 30
+% NUM: 6
+% PAGE: S35-55
+% LINK: http://iopscience.iop.org/0967-3334/30/6/S03
+%
+% See also CALC_GREIT_RM
+
+% (C) 2010 Andy Adler. License: GPL version 2 or version 3
+% $Id: mk_GREIT_model.m 7088 2024-12-20 18:18:28Z aadler $
+
+if ischar(fmdl) && strcmp(fmdl,'UNIT_TEST'); do_unit_test; return; end
+
+citeme(mfilename);
+
+if nargin < 4, options = [];end
+[imdl,fmdl,imgs] = parse_fmdl(fmdl);
+options = parse_options(options,fmdl,imdl, weight);
+
+copt.cache_obj= { fmdl, imdl, imgs, radius, weight, options};
+copt.fstr = 'mk_GREIT_model';
+params = {fmdl, imdl, imgs, radius, weight, options};
+
+[imdl, weight] = eidors_cache(@mk_GREIT_model_calc, params, copt);
+
+
+function [imdl, weight]= mk_GREIT_model_calc( fmdl, imdl, imgs, radius, weight, opt)
+
+Nsim = opt.Nsim;
+[vi,vh,xyz,opt]= stim_targets(imgs, Nsim, opt );
+
+%Calculate rec_model (if absent)
+if ~isfield(imdl,'rec_model');
+   opt.do_coarse2fine = 0;
+   [imdl.rec_model imdl.fwd_model] = mk_pixel_slice(fmdl,opt.target_plane,opt);
+   imdl.rec_model.nodes(:,3) = []; % the third dimension complicated display
+   % medical orientation
+   imdl.rec_model.mdl_slice_mapper.y_pts = fliplr(imdl.rec_model.mdl_slice_mapper.y_pts);
+end
+
+opt.rec_model = imdl.rec_model; % for desired image calculation
+
+imdl.solve = @solve_use_matrix;
+%
+
+if ~isempty(opt.noise_figure) || ~isempty(opt.image_SNR)
+    if ~isempty(opt.noise_figure)
+        % we'll optimise the weight for a given noise figure (NF)
+        target = opt.noise_figure;
+        NoisPerfName = 'Noise Figure';
+    elseif ~isempty(opt.image_SNR)
+        % we'll optimise the weight for a given image SNR
+        NoisPerfName = 'Image SNR';
+        target = opt.image_SNR;        
+        if isfield(opt, 'SigmaN')
+            imdl.hyperparameter.SigmaN = opt.SigmaN;
+        end
+        if isfield(opt, 'image_SNR_targets')
+            imdl.hyperparameter.xyzr_targets = opt.image_SNR_targets;
+        end
+    else
+        error('internal bug: shouldn''t get here');
+    end
+    
+    if ~isempty(weight)
+        eidors_msg('mk_GREIT_model: Using weight parameter as a guess, options.noise_figure or opt.image_SNR is non-empty');
+    else
+        if ~isempty(opt.noise_figure)
+            weight = target;
+        elseif ~isempty(opt.image_SNR)
+            weight = 1/target;   % the inverse, as image SNR \propto 1/NF
+		else
+            error('internal bug: shouldn''t get here');
+        end
+    end
+    
+    xyzr = opt.noise_figure_targets;
+    [jnk,vi_NF] = simulate_movement(imgs,xyzr');
+    vi_NF = sum(vi_NF,2); % sum the targets
+    f = @(X) to_optimise(vh,vi,xyz, radius, X, opt, imdl, target, vi_NF);
+    fms_opts.TolFun = 0.01*target; %don't need higher accuracy
+    % The first call can take a long time. Take it out of the loop to 
+    % allow progress messages. 
+    imdl.solve_use_matrix.RM = calc_GREIT_RM(vh,vi,xyz, radius, weight, opt);
+    progress_msg(['mk_GREIT_model: ', NoisPerfName,':'],0,10000,struct('log_level',1));
+    log_level = eidors_msg('log_level');
+    if  log_level > 1
+       log_level = eidors_msg( 'log_level', 1); % suppress messages
+    end
+    [weight, NF] = bounded_search(f, weight,fms_opts);
+    progress_msg(['Optimal solution gives ', NoisPerfName, '=' ... 
+        num2str(NF+target) ' with weight=' num2str(weight)],inf);
+    assert((sqrt(NF) / target) < 0.01, ...
+            ['Cannot find an accurate enough match for desired ', NoisPerfName]');
+     eidors_msg( 'log_level', log_level); % restore
+end
+% 
+[RM, PJt, M, noiselev] = calc_GREIT_RM(vh,vi, xyz, radius, weight, opt );
+imdl.solve_use_matrix.RM = RM;
+if opt.keep_model_components || opt.keep_intermediate_results
+   % store additional data to be used for faulty electrode compensation
+   imdl.solve_use_matrix.PJt = PJt;
+   imdl.solve_use_matrix.M = M;
+   imdl.solve_use_matrix.noiselev = noiselev;
+end
+if opt.keep_intermediate_results
+   % DEPRECATED but compatible for older code
+   imdl.solve_use_matrix.X = inv(M);
+end
+% imdl.solve_use_matrix.RM = resize_if_reqd(RM,inside,imdl.rec_model);
+imdl.jacobian_bkgnd = imgs;
+%imdl.solve_use_matrix.map = inside;
+imdl.hyperparameter.value = weight;     % store the applied weight as "hyperparameter" value
+if isfield(opt,'show_NF_chosen') && opt.show_NF_chosen
+   xyzr = opt.noise_figure_targets;
+   [jnk,vi_NF] = simulate_movement(imgs,xyzr');
+   NF = calc_noise_figure(imdl,vh, vi_NF);
+   imdl.show_NF_chosen = NF; 
+   eidors_msg(['NF = ', num2str(NF), ' weight = ', num2str(weight)],1);
+end
+
+% standard field order
+imdl = eidors_obj('inv_model', imdl);
+
+% Here we search for a good NF to match
+function [weight, NF] = bounded_search(f, weight,fms_opts);
+    % Use bounded search, but widen if necessary
+    uplim = 2; dnlim = -2;
+    while (1)
+        [weight, NF] = fminbnd(@(x) f(10^x), ...
+             dnlim,uplim,fms_opts);
+        % Check if need to widen boundary
+        if     abs(norm(weight - uplim))<0.1
+           uplim = uplim + 2;
+        elseif abs(norm(weight - dnlim))<0.1
+           dnlim = dnlim - 2;
+        else
+           weight = 10^weight;
+           break
+        end
+    end
+
+
+    return
+%   % original search
+%   [weight, NF] = fminsearch(f, weight,fms_opts);
+
+function out = to_optimise(vh,vi,xy,radius,weight, opt, imdl, ...
+    target,vi_NF)
+
+   % calculate GREIT matrix as usual
+   imdl.solve_use_matrix.RM = calc_GREIT_RM(vh,vi,xy, radius, weight, opt);
+   imdl.hyperparameter.value = weight;
+%    imdl.solve_use_matrix.RM = resize_if_reqd(RM,inside,imdl.rec_model);
+   if ~isempty(opt.noise_figure)
+      NF = calc_noise_figure(imdl,vh, vi_NF);
+   elseif ~isempty(opt.image_SNR)
+      NF = calc_image_SNR(imdl);
+   else
+      error('internal bug: shouldn''t get here');       
+   end
+%  eidors_msg(['NF = ', num2str(NF), ' weight = ', num2str(weight)],1);
+%  pmsg = sprintf('NF=%6.4f weight=%6.4f',NF,weight) 
+%  progress_msg(pmsg,0);
+   progress_msg(round(NF*1e4),10000)
+   out = (NF - target)^2;
+%    out = (mean(NF) - target)^2 + std(NF);
+
+
+function  imgs = get_prepackaged_fmdls( fmdl );
+  switch fmdl
+    case 'c=1;h=2;r=.08;ce=16;bg=1;st=1;me=1;nd'
+      fmdl = ng_mk_cyl_models([2,1,0.18],[16,1],[0.05]); 
+      fmdl.stimulation = mk_stim_patterns(16,1,[0,1],[0,1],{},1);
+      fmdl = mdl_normalize(fmdl,1);
+      imgs= mk_image( fmdl, 1);
+    otherwise
+      error('specified fmdl (%s) is not understood', fmdl);
+  end
+
+function [vi,vh,xyz,opt]= stim_targets(imgs, Nsim, opt );
+    fmdl = imgs.fwd_model;
+   ctr =  mean(fmdl.nodes);  
+   maxx = max(abs(fmdl.nodes(:,1) - ctr(1)));
+   maxy = max(abs(fmdl.nodes(:,2) - ctr(2)));
+   if numel(opt.distr) > 1
+      xyzr = opt.distr;
+      xyzr(4,:) = calc_radius(mean([maxx,maxy]),opt,size(opt.distr,2));
+   else
+       switch opt.distr
+           case 0 % original
+               xyzr=mk_distributions0(Nsim,opt,ctr,maxx,maxy);
+           case 1 %centre-heavy
+               xyzr=mk_distributions1(Nsim,opt,ctr,maxx,maxy);
+           case 2 %uniform
+               xyzr=mk_distributions2(Nsim,opt,ctr,maxx,maxy);
+           case 3 % uniform, non-random
+               xyzr=mk_distributions3(Nsim,opt,ctr,maxx,maxy);
+           otherwise; error('GREIT: opt.distr no such case=%d',opt.distr);
+       end
+   end
+   before = size(xyzr,2);
+   [vh,vi,xyzr] = simulate_movement(imgs, xyzr);
+   after = size(xyzr,2);
+   if(after~=before)
+       eidors_msg(['mk_GREIT_model: Now using ' num2str(after) ' points']);
+   end
+   xyz = xyzr(1:3,:);
+
+function z = calc_offset(z0,opt,Nsim)
+    if opt.random_offset
+        l_bnd = opt.target_offset(1);
+        width = sum(opt.target_offset(1:2));
+        z = z0 - l_bnd + rand(Nsim,1)*width;
+    else
+        z = z0*ones(Nsim,1);
+    end
+
+function r = calc_radius(R,opt,Nsim)
+   if opt.random_size
+       min_sz = opt.target_size(1);
+       max_sz = opt.target_size(2);
+       range = max_sz - min_sz;
+       r = (min_sz + rand(Nsim,1)*range)*R;
+   else
+       r = opt.target_size(1)*ones(Nsim,1)*R;
+   end
+           
+   
+   
+function RM = resize_if_reqd(RM,inside,rmdl)
+   szRM = size(RM,1);
+   if sum(inside) == szRM || ...
+        szRM == size(rmdl.elems,1) || ...
+        (isfield(rmdl,'coarse2fine') && szRM == size(rmdl.coarse2fine,2))
+      % RM is fine
+   elseif any(size(inside)==szRM) && any(size(inside) == 1)
+      RM = RM(inside,:);
+   else
+      error('mismatch in size of provided RecMatrix');
+   end
+
+
+function [imdl,fmdl,imgs] = parse_fmdl(fmdl);
+   imdl = []; 
+   if ischar(fmdl)
+      imgs = get_prepackaged_fmdls( fmdl );
+      fmdl = imgs.fwd_model;
+   elseif isfield(fmdl,'type');
+     switch fmdl.type
+   %  if we get a fwd_model, assume uniform conductivity backgnd of 1
+       case 'fwd_model'; imgs = mk_image( fmdl, 1);
+   %  if we get an image, use it. It may have a non-uniform backgnd
+       case 'image';     imgs = fmdl; % fmdl was an image
+                         fmdl = imgs.fwd_model; % now it's a fmdl
+       case 'inv_model'; imdl = fmdl;
+                         fmdl = imdl.fwd_model;
+                         imgs = calc_jacobian_bkgnd(imdl);
+       otherwise; error('unrecognized eidors object');
+     end
+   else
+      error('specified parameter must be an object or a string');
+   end
+   % Prepare model
+   if isempty(imdl)
+      imdl = eidors_obj('inv_model','GREIT inverse model', ...
+                         'fwd_model',fmdl, 'reconst_type','difference');
+   end
+   
+   
+    function opt = parse_options(opt,fmdl,imdl, weight)
+
+    if ~isfield(opt, 'imgsz'),     opt.imgsz = [32 32]; end
+    if ~isfield(opt, 'square_pixels')
+        opt.square_pixels = 0;
+    end
+    % Allow imdl.rec_model to overwrite options.imgsz
+    if isfield(imdl,'rec_model') && ~isempty(imdl.rec_model)
+        % this assumes rec_model is a rectangular grid, as it should
+        opt.imgsz(1) = numel(unique(imdl.rec_model.nodes(:,1)))-1;
+        opt.imgsz(2) = numel(unique(imdl.rec_model.nodes(:,2)))-1;
+        try
+            opt.imgsz(3) = numel(unique(imdl.rec_model.nodes(:,3)))-1;
+        end
+    end  
+    
+    if ~isfield(opt, 'distr'),     opt.distr = 3;       end 
+    if ~isfield(opt, 'Nsim' ),     opt.Nsim  = 1000;    end
+    if ~isfield(opt, 'noise_figure'), opt.noise_figure = []; end
+    if ~isfield(opt, 'image_SNR'), opt.image_SNR = []; end
+    if isempty(opt.noise_figure) && isempty(opt.image_SNR) && isempty(weight)
+        error('EIDORS:WrongInput', ...
+            'The weight parameter must be specified if opt.noise_figure or opt.image_SNR are empty or absent');
+    end
+    if ~isfield(opt, 'target_size')
+        opt.target_size = 0.05;
+    end
+    if sum(size(opt.target_size)) > 2
+        if opt.target_size(1) == opt.target_size(2);
+            opt.random_size = false;
+        else
+            opt.random_size = true;
+        end
+    end
+    if sum(size(opt.target_size)) == 2
+            opt.random_size = false;
+    end
+    
+    % Calculate the position of the electrodes
+    Nelecs = length(fmdl.electrode);
+    for i=1:Nelecs
+       enodesi = fmdl.electrode(i).nodes;
+       if isfield(fmdl.electrode(i),'faces') % priority over nodes
+          enodesi = fmdl.electrode(i).faces(:);
+       end
+       if isempty(enodesi)
+          error('can''t determine electrode location');
+       end
+       elec_loc(i,:) = mean( fmdl.nodes( enodesi,:),1 );
+    end
+    opt.elec_loc = elec_loc;
+    
+    if ~isfield(opt, 'target_plane')
+          opt.target_plane = mean(elec_loc(:,3));
+    else
+        t = opt.target_plane;
+        minnode = min(fmdl.nodes);
+        maxnode = max(fmdl.nodes);
+        if t<minnode(3) || t>maxnode(3)
+            warning('options.target_plane is outside the model!');
+            eidors_msg('mk_GREIT_model: Resorting to default target_plane');
+            opt.target_plane = mean(elec_loc(:,3));
+        end
+    end
+    if ~isfield(opt, 'target_offset')
+        opt.target_offset = 0;
+    end
+    if sum(size(opt.target_offset)) == 2
+        if opt.target_offset < 0, opt.target_offset = 0; end
+        opt.target_offset(2) = opt.target_offset(1);
+    end
+    if any(opt.target_offset > 0)
+        opt.random_offset = true;
+    else
+        opt.random_offset = false;
+    end
+
+    if ~isfield(opt,'noise_figure_targets');
+       R = max(max(fmdl.nodes(:,1:2)) - min(fmdl.nodes(:,1:2)));
+       xyzr = mean(fmdl.nodes);
+       xyzr(3) = opt.target_plane;
+       xyzr(4) = mean(opt.target_size)*0.5*R;
+       opt.noise_figure_targets = xyzr;
+    end
+
+       
+    if ~isfield(opt,'keep_model_components');
+       opt.keep_model_components = false;
+    end
+    if ~isfield(opt,'keep_intermediate_results');
+       opt.keep_intermediate_results = false;
+    end
+    
+	
+    try, opt.normalize = fmdl.normalize_measurements;
+    catch, 
+        opt.normalize = 0;
+        eidors_msg('mk_GREIT_model: fmdl.normalize_measurements not specified, assuming 0');
+    end
+    
+    % find the boundary at target level (needed in many places)
+    slc = mdl_slice_mesher(fmdl,[inf inf opt.target_plane]);
+    bnd = find_boundary(slc.fwd_model);
+    opt.contour_boundary = order_loop(slc.fwd_model.nodes(unique(bnd),:));
+    
+% case 0 % original
+function xyzr=mk_distributions0(Nsim,opt,ctr,maxx,maxy)
+    r = linspace(0,0.9, Nsim);
+    th = r*4321; % want object to jump around in radius
+    xyzr = [maxx*r.*cos(th); maxy*r.*sin(th);
+        opt.target_plane*ones(1,Nsim);
+        0.05*mean([maxx,maxy])*ones(1,Nsim)];
+
+% case 1 %centre-heavy
+function xyzr=mk_distributions1(Nsim,opt,ctr,maxx,maxy)
+    F = fourier_fit(opt.contour_boundary(:,1:2));
+    v = linspace(0,1,Nsim*100+1); v(end)=[];
+    pts = fourier_fit(F,v);
+    idx_p = floor(rand(Nsim,1)*Nsim*100);
+    xyzr = pts(idx_p,:)'.*repmat(rand(Nsim,1),[1 2])';
+    xyzr(3,:) = calc_offset(opt.target_plane,opt,Nsim);
+               
+    % TODO: What size is good here and how to figure it out?
+    xyzr(4,:) = calc_radius(mean([maxx maxy]),opt,Nsim);
+
+% case 2 %uniform
+function xyzr=mk_distributions2(Nsim,opt,ctr,maxx,maxy)
+    %            F = fourier_fit(opt.contour_boundary(:,1:2));
+    %            v = linspace(0,1,101); v(end)=[];
+    %            pts = fourier_fit(F,v);
+    pts = opt.contour_boundary(:,1:2);
+    % avoid edges
+    pts = 0.9*( pts - repmat(ctr(1:2),length(pts),1) ) + repmat(ctr(1:2),length(pts),1);
+    % using maxx and maxy below would in general not produce a
+    % uniform distribution
+    lim = max(maxx, maxy);
+    x = ctr(1) + (rand(Nsim*10,1)-0.5)*2*lim;
+    y = ctr(2) + (rand(Nsim*10,1)-0.5)*2*lim;
+    IN = inpolygon(x,y,pts(:,1),pts(:,2));
+    xyzr(1,:) = x(find(IN,Nsim));
+    xyzr(2,:) = y(find(IN,Nsim));
+    xyzr(3,:) = calc_offset(opt.target_plane,opt,Nsim);
+    % TODO: What size is good here and how to figure it out?
+    xyzr(4,:) = calc_radius(mean([maxx maxy]),opt,Nsim);
+
+% case 3 % uniform, non-random
+function xyzr=mk_distributions3(Nsim,opt,ctr,maxx,maxy)
+    %            F = fourier_fit(opt.elec_loc(:,1:2));
+    %            v = linspace(0,1,101); v(end)=[];
+    %            pts = fourier_fit(F,v);
+    pts = opt.contour_boundary(:,1:2);
+    lim = max(maxx, maxy);
+    frac = polyarea(pts(:,1),pts(:,2)) / (2*lim)^2;
+    [x,y] = ndgrid( linspace(-lim,lim,ceil(sqrt(Nsim/frac))), ...
+        linspace(-lim,lim,ceil(sqrt(Nsim/frac))));
+    
+    x = x+ctr(1); y = y + ctr(2);
+    IN = inpolygon(x,y,pts(:,1),pts(:,2));
+    xyzr(1,:) = x(find(IN));
+    xyzr(2,:) = y(find(IN));
+    xyzr(3,:) = calc_offset(opt.target_plane,opt,size(xyzr,2));
+    % TODO: What size is good here and how to figure it out?
+    xyzr(4,:) = calc_radius(mean([maxx maxy]),opt,size(xyzr,2));
+    eidors_msg(['mk_GREIT_model: Using ' num2str(size(xyzr,2)) ' points']);
+
+function do_unit_test
+   do_very_basic_test
+   do_very_basic_test_3d
+   do_performance_test; 
+   do_basic_tests
+
+
+function do_very_basic_test
+    img = mk_image(mk_common_model('a3cr',[16,1]));
+    img.elem_data(5+64*6) = 1.2; vi=fwd_solve(img);
+    img.elem_data(:)   = 1;   vh=fwd_solve(img);
+    opt.noise_figure = 1;
+
+    for test = 1:2; switch test
+       case 1; img.elem_data(:) = 1; % uniform
+          xc_= 0.19852208; yc_=-0.2336663;
+       case 2; 
+          r2 =sum(interp_mesh(img,0).^2*[1;1;0],2);
+          img.elem_data = 1 + (r2<0.2); % centre
+          xc_= 0.21157312; yc_=-0.21416713;
+       end
+       imdl = mk_GREIT_model(img,0.2,[],opt);
+       imgr = inv_solve(imdl,vh,vi);
+
+       imgs = calc_slices(imgr);
+       imgs(isnan(imgs)) = 0;
+       ls = linspace(-1,1,32); [x,y] = meshgrid(ls,ls);
+       xc = [sum(sum(imgs.*x))/sum(sum(imgs))];
+       yc = [sum(sum(imgs.*y))/sum(sum(imgs))];
+       
+% disp([xc,xc_,yc,yc_]);
+       unit_test_cmp('Reconst xpos',xc,xc_,1e-4);
+       unit_test_cmp('Reconst ypos',yc,yc_,1e-4);
+    end
+
+function do_very_basic_test_3d
+    img = mk_image(mk_common_model('a3cr',[16,1]));
+    vopt.imgsz = [32 32];
+    vopt.square_pixels = true;
+    vopt.zvec = [-0.2,0.2];
+    vopt.save_memory = 1;
+    opt.noise_figure = 1.0;
+
+    % GREIT 3D with a 1x32 electrode layout
+    [imdl,opt.distr] = GREIT3D_distribution(img.fwd_model, vopt);
+    img.elem_data(5+64*6) = 1.2; vi=fwd_solve(img);
+    img.elem_data(:)   = 1;   vh=fwd_solve(img);
+    opt.noise_figure = 1;
+
+    for test = 1:2; switch test
+       case 1; img.elem_data(:) = 1; % uniform
+          xc_= 0.19221520; yc_=-0.23110588;
+       case 2; 
+          r2 =sum(interp_mesh(img,0).^2*[1;1;0],2);
+          img.elem_data = 1 + (r2<0.2); % centre
+          xc_= 0.20440922; yc_=-0.20445254;
+       end
+       imdl.jacobian_bkgnd.value = img.elem_data;
+       imdl = mk_GREIT_model(imdl,0.2,[],opt);
+       imgr = inv_solve(imdl,vh,vi);
+
+       imgs = calc_slices(imgr,[inf,inf,0]);
+       imgs(isnan(imgs)) = 0;
+       ls = linspace(-1,1,32); [x,y] = meshgrid(ls,ls);
+       xc = [sum(sum(imgs.*x))/sum(sum(imgs))];
+       yc = [sum(sum(imgs.*y))/sum(sum(imgs))];
+       
+       unit_test_cmp('Reconst xpos',xc,xc_,1e-7);
+       unit_test_cmp('Reconst ypos',yc,yc_, 1e-7);
+    end
+
+function do_basic_tests
+
+sidx= 1; subplot(4,4,sidx);
+
+% Create a 3D elliptical cylinder with 16 circular electrodes 
+fmdl_1= ng_mk_ellip_models([1,1.2,0.8],[16,0.5],[0.1]); %show_fem(fmdl);
+% Put two balls into the elliptical cylinder
+extra={'ball','solid ball = sphere(0.5,0.5,0.5;0.1);'};
+[fmdl_2,mat_idx]= ng_mk_ellip_models([1,1.2,0.8],[16,0.5],[0.1],extra); 
+% Set the model to use adjacent current patterns
+stim = mk_stim_patterns(16,1,[0,1],[0,1],{}); 
+fmdl_1.stimulation = stim;
+fmdl_2.stimulation = stim;
+% Simulate homogeneous voltages (background conductivity = 0.5);
+img = mk_image(fmdl_2, 0.5); vh = fwd_solve(img); %show_fem(img);
+% Simulate inhomogeneous voltages (ball conductivity = 1.0);
+img.elem_data(mat_idx{2})= 1.0; vi = fwd_solve(img); 
+sidx= sidx+1; subplot(4,4,sidx);
+show_fem(img);
+% Reconstruct the image using GREITv1
+imdl= mk_common_gridmdl('GREITc1'); 
+img= inv_solve(imdl,vh,vi);
+sidx= sidx+1; subplot(4,4,sidx);
+show_slices(img)
+
+% Create a GREIT model for the ellipse
+opt.noise_figure = 0.5; opt.distr = 3;opt.square_pixels = 1; %other options are defaults
+fmdl_2 = mdl_normalize(fmdl_2,0);
+% use the true model (inverse crime)
+img_2 = mk_image(fmdl_2,0.5);
+imdl1 = mk_GREIT_model(img_2, 0.25, [], opt);
+img1= inv_solve(imdl1,vh,vi);  
+sidx= sidx+1; subplot(4,4,sidx);
+show_slices(img1);
+
+% now do the same but using image SNR and not NF
+opt = rmfield(opt,'noise_figure');
+opt.image_SNR = 1e-3; 
+weight = 90; % need to choose a weight that works with SNR
+imdl1 = mk_GREIT_model(img_2, 0.25, weight, opt);
+img1= inv_solve(imdl1,vh,vi);  
+sidx= sidx+1; subplot(4,4,sidx); show_slices(img1);
+
+unit_test_cmp('Expect no PJT or X', ~isfield(imdl1.solve_use_matrix, 'PJt') & ...
+                                    ~isfield(imdl1.solve_use_matrix, 'X'), true);
+
+weight = [];
+opt.keep_model_components = true;
+imdl1 = mk_GREIT_model(img_2, 0.25, weight, opt);
+sumat = imdl1.solve_use_matrix;
+unit_test_cmp('Expect PJT and M', ...
+  isfield(sumat, 'PJt') & ...
+ ~isfield(sumat, 'X') & ...
+  isfield(sumat, 'M'), true);
+
+opt.keep_intermediate_results = true;
+imdl1 = mk_GREIT_model(img_2, 0.25, weight, opt);
+sumat = imdl1.solve_use_matrix;
+unit_test_cmp('Expect PJT, X and M', ...
+  isfield(sumat, 'PJt') & ...
+  isfield(sumat, 'X') & ...
+  isfield(sumat, 'M'), true);
+
+img1= inv_solve(imdl1,vh,vi);  
+sidx= sidx+1; subplot(4,4,sidx); show_slices(img1);
+
+opt = rmfield(opt,{'image_SNR', 'keep_intermediate_results'}); opt.noise_figure = 0.5;
+
+% use honogenous model 
+fmdl_1 = mdl_normalize(fmdl_1,0);
+imdl2 = mk_GREIT_model(mk_image(fmdl_1,0.5), 0.25, [], opt);
+img2= inv_solve(imdl2,vh,vi); 
+sidx= sidx+1; subplot(4,4,sidx); show_slices(img2);
+
+
+% specify targets for NF calc
+opt.noise_figure_targets = [-.5 0 .5 .2;.5 0 .5 .2;];
+imdl3 = mk_GREIT_model(mk_image(fmdl_1,0.5), 0.25, [], opt);
+img3= inv_solve(imdl3,vh,vi); 
+sidx= sidx+1; subplot(4,4,sidx); show_slices(img3);
+% cleanup
+opt = rmfield(opt,'noise_figure_targets');
+
+
+%% repeat with normalized data
+fmdl_2 = mdl_normalize(fmdl_2,1);
+% use the true model (inverse crime)
+imdl3 = mk_GREIT_model(mk_image(fmdl_2,0.5), 0.25, [], opt);
+img3= inv_solve(imdl3,vh,vi); 
+
+% use honogenous model 
+fmdl_1 = mdl_normalize(fmdl_1,1);
+imdl4 = mk_GREIT_model(mk_image(fmdl_1,0.5), 0.25, [], opt);
+img4= inv_solve(imdl4,vh,vi); 
+
+sidx= sidx+1; subplot(4,4,sidx);
+show_slices([img1 img2 img3 img4])
+
+
+%% Use a prepackaged model
+fmdl = mk_library_model('adult_male_16el_lungs');
+fmdl.stimulation = stim;
+fmdl = mdl_normalize(fmdl,1);
+img = mk_image(fmdl,1);
+img.elem_data([fmdl.mat_idx{2}; fmdl.mat_idx{3}],1) = 0.3;
+vh = fwd_solve(img);
+img.elem_data([fmdl.mat_idx{2}; fmdl.mat_idx{3}],1) = 0.4;
+vi = fwd_solve(img);
+
+
+fmdl2 = mk_library_model('adult_male_16el');
+fmdl2.stimulation = stim;
+fmdl2 = mdl_normalize(fmdl2,1);
+
+opt.imgsz = [50 30];
+opt.square_pixels = 1;
+imdl = mk_GREIT_model(fmdl2,0.25,3,opt);
+
+img = inv_solve(imdl,vh, vi);
+sidx= sidx+1; subplot(4,4,sidx);
+show_slices(img);
+
+
+% do the same again with image SNR and not NF
+opt = rmfield(opt,'noise_figure');
+opt.image_SNR = 1e-4; 
+weight = 0.5; % need to choose a weight that works with SNR
+imdl = mk_GREIT_model(fmdl2, 0.25, weight, opt);
+img = inv_solve(imdl,vh, vi);
+sidx= sidx+1; subplot(4,4,sidx); show_slices(img);
+
+opt.image_SNR_targets = [0.3 0.3  0.5 0.05;  0.3 -0.3 0.5 0.05; ...
+                         0.3 -0.3 0.5 0.05; -0.3 -0.3 0.5 0.05; ...
+                         0.3 0    0.5 0.05; -0.3  0   0.5 0.05; ...
+                         0   0.3  0.5 0.05;  0   -0.3 0.5 0.05]';
+opt.image_SNR = 3e-4; 
+weight = 1E-2; % need to choose a weight that works with SNR
+imdl = mk_GREIT_model(fmdl2, 0.25, weight, opt);
+img = inv_solve(imdl,vh, vi);
+sidx= sidx+1; subplot(4,4,sidx); show_slices(img);
+
+
+function do_performance_test
+% Reconstruct GREIT Images
+imdl_v1 = mk_common_gridmdl('GREITc1');
+imdl_v1.inv_solve.calc_solution_error = false;
+
+% Reconstruct backprojection Images
+imdl_bp = mk_common_gridmdl('backproj');
+
+% Recosntruct with new GREIT
+% fmdl = ng_mk_cyl_models([2,1,0.05],[16,1],[0.05]); 
+fmdl = mk_library_model('cylinder_16x1el_fine');
+fmdl.nodes = fmdl.nodes/15; % make radius 1;
+fmdl.stimulation = mk_stim_patterns(16,1,[0,1],[0,1],{'no_meas_current'}, 1);
+opt.noise_figure = 0.88;
+opt.target_size = 0.1;
+opt.distr = 0;
+imdl_gr = mk_GREIT_model(fmdl, 0.2, [], opt);
+
+opt = struct();
+opt.noise_figure = 0.5; % current recommendation
+imdl_def = mk_GREIT_model(fmdl,0.2,[],opt);
+
+opt.desired_solution_fn = 'GREIT_desired_img_original';
+imdl_org = mk_GREIT_model(fmdl,0.2,[],opt);
+
+test_performance( { imdl_v1, imdl_gr, imdl_def, imdl_org},fmdl );
+legend({'v1', 'gr', 'def', 'org'});

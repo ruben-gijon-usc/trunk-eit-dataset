@@ -2,7 +2,7 @@ out/
 uv.lock
 /dataset/
 _driver.m
-vendor/
+
 
 # Trained model checkpoints & heavy weights
 *.pt
