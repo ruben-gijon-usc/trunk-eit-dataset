@@ -25,7 +25,11 @@
 %   elem_data.txt — element conductivities [E × 1]
 %   voltages.txt  — boundary voltage measurements [M × 1]
 
-function run_forward(n_electrodes, pattern_str, grid_path, x_min, x_max, y_min, y_max, fallback_cond, out_dir)
+function run_forward(n_electrodes, pattern_str, grid_path, x_min, x_max, y_min, y_max, fallback_cond, out_dir, save_internal_voltages)
+    if nargin < 10
+        save_internal_voltages = false;
+    end
+
     % --- 1. Initialise EIDORS ------------------------------------------------
     % mfilename('fullpath') is reliable even when called via addpath from a driver
     % NOTE: addpath is already set by the Python driver before calling this func.
@@ -38,6 +42,9 @@ function run_forward(n_electrodes, pattern_str, grid_path, x_min, x_max, y_min, 
     img = assign_conductivity(img, grid_path, x_min, x_max, y_min, y_max, fallback_cond);
 
     % --- 4. Forward solve ----------------------------------------------------
+    if save_internal_voltages
+        img.fwd_solve.get_all_meas = 1;
+    end
     vh = fwd_solve(img);
 
     if ~isfield(vh, 'meas')
@@ -51,5 +58,10 @@ function run_forward(n_electrodes, pattern_str, grid_path, x_min, x_max, y_min, 
     elem_data = img.elem_data;
     voltages = vh.meas;
     
-    save('-v7', out_file, 'nodes', 'elems', 'elem_data', 'voltages');
+    if save_internal_voltages && isfield(vh, 'volt')
+        nodal_voltages = vh.volt;
+        save('-v7', out_file, 'nodes', 'elems', 'elem_data', 'voltages', 'nodal_voltages');
+    else
+        save('-v7', out_file, 'nodes', 'elems', 'elem_data', 'voltages');
+    end
 end

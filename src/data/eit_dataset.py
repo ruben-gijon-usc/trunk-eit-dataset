@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -19,11 +20,14 @@ class EITDataset(Dataset):
         pattern: Literal["adjacent", "opposite"] = None,
         target_type: Literal["grid", "elem_data"] = "grid",
         normalize: bool = True,
+        load_voltage_maps: bool = False,
     ):
         self.dataset_dir = Path(dataset_dir)
         self.flatten_grid = flatten_grid
         self.target_type = target_type
         self.normalize = normalize
+        self.load_voltage_maps = load_voltage_maps
+        self.voltage_maps_dir = self.dataset_dir / "targets/voltage_maps"
 
         # Set Inputs directory based on pattern
         if pattern is not None:
@@ -44,11 +48,15 @@ class EITDataset(Dataset):
             if (self.target_dir / f"{idx}.npy").exists():
                 self.valid_indices.append(idx)
 
-        # Ensure determinism in data loading
-        self.valid_indices.sort(key=int)
+        # Ensure determinism in data loading with natural alphanumeric sorting
+        self.valid_indices.sort(
+            key=lambda s: [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
+        )
 
         if len(self.valid_indices) == 0:
-            raise FileNotFoundError(f"¡El dataset está vacío o la ruta es incorrecta! No se encontraron muestras válidas en: {self.dataset_dir.absolute()}")
+            raise FileNotFoundError(
+                f"¡El dataset está vacío o la ruta es incorrecta! No se encontraron muestras válidas en: {self.dataset_dir.absolute()}"
+            )
 
     def __len__(self) -> int:
         return len(self.valid_indices)
@@ -83,5 +91,10 @@ class EITDataset(Dataset):
         else:
             # For elem_data, mask is just a vector of 1s (all mesh elements are valid wood by definition of FEM)
             mask_tensor = torch.ones_like(target_tensor)
+
+        if self.load_voltage_maps:
+            v_maps_arr = np.load(self.voltage_maps_dir / f"{idx}.npy")
+            v_maps_tensor = torch.tensor(v_maps_arr, dtype=torch.float32)
+            return voltage_tensor, target_tensor, mask_tensor, v_maps_tensor
 
         return voltage_tensor, target_tensor, mask_tensor

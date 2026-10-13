@@ -15,11 +15,17 @@ class HybridEITLoss(BaseEITLoss):
     """
 
     def __init__(
-        self, alpha: float = 1.0, beta: float = 10.0, data_range: float = MAX_CONDUCTIVITY
+        self,
+        alpha: float = 1.0,
+        beta: float = 10.0,
+        data_range: float = MAX_CONDUCTIVITY,
+        is_flattened: bool = False,
+        **kwargs,
     ):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
+        self.is_flattened = is_flattened
 
         self.rmse_loss = MaskedRMSELoss()
         self.ssim_loss = MaskedSSIMLoss(data_range=data_range)

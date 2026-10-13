@@ -4,6 +4,22 @@ uv.lock
 _driver.m
 vendor/
 
+# Trained model checkpoints & heavy weights
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.bin
+*.joblib
+best_*_model.json
+*_model.json
+
+# Numerical matrices and data arrays
+*.npy
+*.npz
+*.mat
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

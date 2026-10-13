@@ -7,41 +7,34 @@ import optuna
 import torch
 from torch.utils.data import DataLoader, random_split
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.training.dnn.dnn_utils import DynamicDNN, get_criterion, grid_flattened_metrics_fn
 from src.data.eit_dataset import EITDataset
-from src.training.train_utils import train_model
+from src.training.arquitectures.cnn import DynamicCNN, cnn_metrics_fn
+from src.training.criterion.rmse import MaskedRMSELoss
+from src.training.train_utils import set_seed, train_model
 
 
-def objective(trial, dataset, input_dim, output_dim, device, epochs, loss_type):
-    n_layers = trial.suggest_int("n_layers", 2, 5)
-
-    hidden_dims = []
-    for i in range(n_layers):
-        hidden_dims.append(
-            trial.suggest_categorical(f"hidden_dim_l{i}", [128, 256, 512, 1024, 2048])
-        )
-
-    dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.5)
-    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+def objective(trial, dataset, input_dim, device, epochs, seed: int = 42):
+    base_channels = trial.suggest_categorical("base_channels", [32, 64, 128, 256])
+    dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.4)
+    lr = trial.suggest_float("lr", 1e-4, 5e-3, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
 
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_ds, val_ds = random_split(
-        dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42)
+        dataset, [train_size, val_size], generator=torch.Generator().manual_seed(seed)
     )
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
-    model = DynamicDNN(input_dim, output_dim, hidden_dims, dropout_rate)
+    model = DynamicCNN(input_dim=input_dim, base_channels=base_channels, dropout_rate=dropout_rate)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-
-    criterion = get_criterion(loss_type)
+    criterion = MaskedRMSELoss()
 
     history = train_model(
         model=model,
@@ -52,41 +45,44 @@ def objective(trial, dataset, input_dim, output_dim, device, epochs, loss_type):
         max_epochs=epochs,
         patience=10,
         device=device,
-        metrics_fn=grid_flattened_metrics_fn,
+        metrics_fn=cnn_metrics_fn,
     )
     return history.get("best_val_loss", history["val_loss"][-1])
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Tuning de hiperparámetros para DNN")
+    parser = argparse.ArgumentParser(
+        description="Tuning de hiperparámetros para CNN con Masked RMSE Loss"
+    )
     parser.add_argument("--dataset_dir", type=str, default="dataset/dataset_16e_all")
     parser.add_argument("--trials", type=int, default=10)
     parser.add_argument("--epochs", type=int, default=50)
-    parser.add_argument("--loss", type=str, default="hybrid", choices=["mse", "hybrid"])
+    parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria para replicabilidad")
     args = parser.parse_args()
 
+    set_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     output_dir = Path(__file__).resolve().parent
 
-    dataset = EITDataset(PROJECT_ROOT / args.dataset_dir, target_type="grid", flatten_grid=True)
-    sample_x, sample_y, _ = dataset[0]
+    dataset = EITDataset(PROJECT_ROOT / args.dataset_dir, target_type="grid", flatten_grid=False)
+    sample_x, _, _ = dataset[0]
     input_dim = sample_x.numel()
-    output_dim = sample_y.numel()
 
-    print(f"Buscando hiperparámetros con Optuna (Loss: {args.loss.upper()})...")
-    study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=42))
+    print(f"Buscando hiperparámetros con Optuna para CNN (Seed: {args.seed}, Loss: Masked RMSE)...")
+    study = optuna.create_study(
+        direction="minimize", sampler=optuna.samplers.TPESampler(seed=args.seed)
+    )
     study.optimize(
-        lambda trial: objective(
-            trial, dataset, input_dim, output_dim, device, args.epochs, args.loss
-        ),
+        lambda trial: objective(trial, dataset, input_dim, device, args.epochs, seed=args.seed),
         n_trials=args.trials,
     )
 
     best_params = study.best_params
-    best_params["loss_type"] = args.loss
+    best_params["loss_type"] = "rmse"
     best_params["n_trials_ran"] = args.trials
+    best_params["seed"] = args.seed
 
-    out_file = output_dir / f"best_params_dnn_{args.loss}.json"
+    out_file = output_dir / "best_params_cnn_rmse.json"
     with open(out_file, "w") as f:
         json.dump(best_params, f, indent=4)
 

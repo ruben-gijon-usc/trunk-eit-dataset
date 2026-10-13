@@ -1,0 +1,12 @@
+{
+    "n_layers": 3,
+    "hidden_dim_l0": 128,
+    "hidden_dim_l1": 128,
+    "hidden_dim_l2": 128,
+    "dropout_rate": 0.194338644844741,
+    "lr": 0.00034889766548903674,
+    "weight_decay": 0.0003063462210622083,
+    "batch_size": 64,
+    "loss_type": "rmse",
+    "n_trials_ran": 10
+}

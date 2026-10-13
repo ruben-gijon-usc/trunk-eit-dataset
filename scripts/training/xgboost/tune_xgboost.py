@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.eit_dataset import EITDataset
+from src.training.train_utils import set_seed
 
 
 def load_data(dataset_dir: str):
@@ -30,7 +31,7 @@ def load_data(dataset_dir: str):
     return np.array(X_list), np.array(y_list)
 
 
-def objective(trial, X, y):
+def objective(trial, X, y, seed: int = 42):
     param = {
         "n_estimators": trial.suggest_categorical(
             "n_estimators", [20, 50, 100]
@@ -41,10 +42,11 @@ def objective(trial, X, y):
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
         "tree_method": "hist",
         "n_jobs": -1,
+        "random_state": seed,
     }
 
     # Split rápido para Optuna
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=seed)
 
     # XGBRegressor natively supports multi-output regression
     model = xgb.XGBRegressor(**param)
@@ -59,8 +61,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_dir", type=str, default="dataset/dataset_16e_all")
     parser.add_argument("--trials", type=int, default=10)
+    parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria para replicabilidad")
     args = parser.parse_args()
 
+    set_seed(args.seed)
     output_dir = Path(__file__).resolve().parent
 
     print("Cargando dataset para XGBoost (puede tardar un poco y requerir RAM)...")
@@ -71,13 +75,16 @@ def main():
 
     print(f"Datos cargados: X={X.shape}, y={y.shape}")
 
-    print("\nIniciando Optuna Tuning para XGBoost...")
-    study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=42))
-    study.optimize(lambda trial: objective(trial, X, y), n_trials=args.trials)
+    print(f"\nIniciando Optuna Tuning para XGBoost (Seed: {args.seed})...")
+    study = optuna.create_study(
+        direction="minimize", sampler=optuna.samplers.TPESampler(seed=args.seed)
+    )
+    study.optimize(lambda trial: objective(trial, X, y, seed=args.seed), n_trials=args.trials)
 
     best_params = study.best_params
     best_params["tree_method"] = "hist"
     best_params["n_jobs"] = -1
+    best_params["random_state"] = args.seed
 
     out_file = output_dir / "best_params_xgboost.json"
     with open(out_file, "w") as f:

@@ -1,13 +1,6 @@
-import sys
-from pathlib import Path
-
 import torch.nn as nn
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 from scripts.data.config import GROUND_TRUTH_THRESHOLD, MAX_CONDUCTIVITY
-from src.training.criterion.combined import HybridEITLoss
 from src.training.metrics import EITMetricsEvaluator
 
 
@@ -50,10 +43,3 @@ def grid_flattened_metrics_fn(preds, targets, threshold=GROUND_TRUTH_THRESHOLD, 
     pe = evaluator.position_error(p_2d, t_2d, m_2d).item()
 
     return {"rmse": rmse_val, "ssim": ssim_val, "dice": dice.item(), "iou": iou.item(), "pe": pe}
-
-
-def get_criterion(loss_type: str):
-    if loss_type.lower() == "hybrid":
-        return HybridEITLoss(alpha=1.0, beta=10.0, data_range=MAX_CONDUCTIVITY)
-    else:
-        return nn.MSELoss()

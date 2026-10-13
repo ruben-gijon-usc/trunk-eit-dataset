@@ -10,6 +10,24 @@ from scripts.data.config import GROUND_TRUTH_THRESHOLD
 from src.training.early_stopping import EarlyStopping
 
 
+def set_seed(seed: int = 42) -> None:
+    """
+    Sets random seed across Python, NumPy, and PyTorch for full reproducibility.
+    Configures cuDNN deterministic flags when running on GPU.
+    """
+    import random
+    import numpy as np
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 def default_metrics_fn(preds, targets, threshold=GROUND_TRUTH_THRESHOLD, mask=None):
     return {}
 
@@ -141,9 +159,13 @@ def train_model(
 
         early_stopper(val_loss, model)
         if early_stopper.early_stop:
-            print(f"🛑 Early stopping activado. Entrenamiendo detenido en la época {epoch + 1}.")
+            print(f"🛑 Early stopping activado. Entrenamiento detenido en la época {epoch + 1}.")
             break
+
+    if not early_stopper.early_stop:
+        early_stopper.restore_best_model(model)
 
     print("✅ Entrenamiento completado (se han restaurado los mejores pesos).")
     history["best_val_loss"] = early_stopper.best_value
+    history["best_epoch_idx"] = history["val_loss"].index(min(history["val_loss"]))
     return dict(history)

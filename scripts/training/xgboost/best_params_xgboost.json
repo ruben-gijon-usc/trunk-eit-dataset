@@ -1,0 +1,9 @@
+{
+    "n_estimators": 50,
+    "max_depth": 7,
+    "learning_rate": 0.0024348773534554596,
+    "subsample": 0.662397808134481,
+    "colsample_bytree": 0.6232334448672797,
+    "tree_method": "hist",
+    "n_jobs": -1
+}

@@ -9,6 +9,7 @@ Orchestrates the full EIT forward pipeline:
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -16,8 +17,6 @@ from dataclasses import dataclass
 import numpy as np
 import scipy.io as sio
 from numpy.typing import NDArray
-
-import shutil
 
 from ..data_representations.grid import generate_grid
 from ..models import Trunk
@@ -65,10 +64,7 @@ def check_eidors_available(octave_bin: str | None = None) -> None:
 
     startup_m = os.path.join(_SCRIPTS_DIR, "startup_eidors.m")
     test_cmd = (
-        f"run('{startup_m}'); "
-        f"addpath('{_SCRIPTS_DIR}'); "
-        "startup_eidors(); "
-        "disp('EIDORS_OK');"
+        f"run('{startup_m}'); addpath('{_SCRIPTS_DIR}'); startup_eidors(); disp('EIDORS_OK');"
     )
 
     try:
@@ -98,6 +94,53 @@ def check_eidors_available(octave_bin: str | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 
+def interpolate_nodal_voltages_to_grid(
+    nodes: NDArray[np.float64],
+    nodal_voltages: NDArray[np.float64],
+    trunk: Trunk,
+    resolution: int = 64,
+) -> NDArray[np.float64]:
+    """Interpolate FEM nodal potentials onto a 2D regular grid matching the trunk bounds."""
+    from scipy.interpolate import griddata
+
+    x_min, x_max, y_min, y_max = trunk.get_bounds()
+    padx = (x_max - x_min) * 0.05
+    pady = (y_max - y_min) * 0.05
+    x_min, x_max = x_min - padx, x_max + padx
+    y_min, y_max = y_min - pady, y_max + pady
+
+    width = x_max - x_min
+    height = y_max - y_min
+
+    if width > height:
+        nx = resolution
+        ny = max(1, int(resolution * (height / width)))
+    else:
+        nx = max(1, int(resolution * (width / height)))
+        ny = resolution
+
+    x = np.linspace(x_min, x_max, nx)
+    y = np.linspace(y_min, y_max, ny)
+    X, Y = np.meshgrid(x, y)
+
+    if nodal_voltages.ndim == 1:
+        grid_v = griddata(nodes, nodal_voltages, (X, Y), method="linear", fill_value=0.0)
+        return grid_v.astype(np.float32)
+    else:
+        P = nodal_voltages.shape[1]
+        grid_maps = np.zeros((P, ny, nx), dtype=np.float32)
+        for p in range(P):
+            grid_maps[p] = griddata(
+                nodes, nodal_voltages[:, p], (X, Y), method="linear", fill_value=0.0
+            )
+        return grid_maps
+
+
+# ---------------------------------------------------------------------------
+# Result dataclasses  (no dependency on src/eidors)
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class MeshData:
     """FEM mesh returned by EIDORS."""
@@ -113,6 +156,8 @@ class EITResult:
     voltages: NDArray[np.float64]  # boundary voltage measurements [M]
     mesh: MeshData  # FEM mesh
     elem_data: NDArray[np.float64]  # per-element conductivities [E]
+    nodal_voltages: NDArray[np.float64] | None = None  # internal nodal potentials [N, P]
+    voltage_maps: NDArray[np.float64] | None = None  # 2D voltage maps [P, H, W]
 
 
 @dataclass
@@ -135,6 +180,7 @@ def simulate_forward_process(
     n_electrodes: int = 16,
     pattern: str = "adjacent",
     octave_timeout: int = 300,
+    save_voltage_maps: bool = False,
 ) -> ForwardResult | None:
     """Run the complete EIT forward process for a Trunk model.
 
@@ -146,11 +192,12 @@ def simulate_forward_process(
     3. Read back voltages, mesh and element data and return a ForwardResult.
 
     Args:
-        trunk:           Domain model (geometry + conductivities).
-        resolution:      Grid resolution (pixels along the longest axis).
-        n_electrodes:    Number of EIT surface electrodes.
-        pattern:         Measurement pattern ('adjacent', 'opposite', etc.).
-        octave_timeout:  Maximum seconds to wait for the Octave subprocess.
+        trunk:               Domain model (geometry + conductivities).
+        resolution:          Grid resolution (pixels along the longest axis).
+        n_electrodes:        Number of EIT surface electrodes.
+        pattern:             Measurement pattern ('adjacent', 'opposite', etc.).
+        octave_timeout:      Maximum seconds to wait for the Octave subprocess.
+        save_voltage_maps:   If True, solves and interpolates internal 2D voltage maps V(x,y).
 
     Returns:
         ForwardResult on success, or None if the simulation fails.
@@ -183,7 +230,8 @@ def simulate_forward_process(
                 f"    {x_min}, {x_max},",
                 f"    {y_min}, {y_max},",
                 f"    {base_conductivity},",
-                f"    '{tmpdir}'",
+                f"    '{tmpdir}',",
+                f"    {'true' if save_voltage_maps else 'false'}",
                 ");",
             ]
         )
@@ -193,7 +241,9 @@ def simulate_forward_process(
 
         octave_bin = get_octave_binary()
         if octave_bin is None:
-            print("[forward_process] 'octave' / 'octave-cli' not found in PATH. EIDORS simulation skipped.")
+            print(
+                "[forward_process] 'octave' / 'octave-cli' not found in PATH. EIDORS simulation skipped."
+            )
             return None
 
         proc = subprocess.run(
@@ -221,10 +271,22 @@ def simulate_forward_process(
         elems = data["elems"].astype(np.int32)
         elem_data = data["elem_data"].squeeze()
 
+        nodal_voltages = data.get("nodal_voltages")
+        voltage_maps = None
+        if save_voltage_maps and nodal_voltages is not None:
+            voltage_maps = interpolate_nodal_voltages_to_grid(
+                nodes=nodes,
+                nodal_voltages=nodal_voltages,
+                trunk=trunk,
+                resolution=resolution,
+            )
+
         eit_result = EITResult(
             voltages=voltages,
             mesh=MeshData(nodes=nodes, elems=elems),
             elem_data=elem_data,
+            nodal_voltages=nodal_voltages,
+            voltage_maps=voltage_maps,
         )
 
     return ForwardResult(trunk=trunk, grid=grid, eit_result=eit_result)

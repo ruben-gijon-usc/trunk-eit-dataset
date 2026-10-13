@@ -11,9 +11,6 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
-from src.data.models.shape import Harmonic
-
 # Importamos la configuración original para mantener los límites físicos (S/m) idénticos
 from scripts.data.config import COND_ANOMALY_MAX, COND_ANOMALY_MIN, COND_BASE_MAX, COND_BASE_MIN
 
@@ -21,6 +18,8 @@ from scripts.data.config import COND_ANOMALY_MAX, COND_ANOMALY_MIN, COND_BASE_MA
 from scripts.data.generate_dataset import get_dataset as get_id_dataset
 from src.data.data_representations.grid import generate_mask
 from src.data.forward_process.simulator import ForwardResult, simulate_forward_process
+from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
+from src.data.models.shape import Harmonic
 from src.data.models.trunk import Anomaly, SimpleTrunk, Trunk
 from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
 
@@ -96,11 +95,19 @@ def get_ood_dataset(n: int) -> list[Trunk]:
 # ---------------------------------------------------------------------------
 # Save helpers
 # ---------------------------------------------------------------------------
-def save_sample(result: ForwardResult, i: int, base_path: Path) -> None:
+def save_sample(
+    result: ForwardResult, i: int, base_path: Path, save_voltage_maps: bool = False
+) -> None:
     mask = generate_mask(result.trunk, resolution=result.grid.shape[0])
     np.save(base_path / f"targets/grid/sample_{i:04d}.npy", result.grid)
     np.save(base_path / f"targets/mask/sample_{i:04d}.npy", mask)
     np.save(base_path / f"targets/elem_data/sample_{i:04d}.npy", result.eit_result.elem_data)
+
+    if save_voltage_maps and result.eit_result.voltage_maps is not None:
+        np.save(
+            base_path / f"targets/voltage_maps/sample_{i:04d}.npy", result.eit_result.voltage_maps
+        )
+
     with open(base_path / f"metadata/sample_{i:04d}.json", "w", encoding="utf-8") as fh:
         json.dump(result.trunk.to_dict(), fh, indent=2)
     valid_pixels = result.grid[mask > 0]
@@ -148,6 +155,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--seed", type=int, default=999, help="Semilla aleatoria (distinta al entrenamiento)"
     )
+    parser.add_argument(
+        "--save_voltage_maps",
+        action="store_true",
+        default=False,
+        help="Guardar mapas 2D del potencial eléctrico interno V(x,y) para PINNs",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -165,7 +178,10 @@ if __name__ == "__main__":
     for e in electrode_list:
         bp = PROJECT_ROOT / "dataset" / f"dataset_{e}e_{args.pattern}_{suffix}"
         (bp / "mesh").mkdir(parents=True, exist_ok=True)
-        for sub in ("grid", "mask", "elem_data"):
+        target_subs = ["grid", "mask", "elem_data"]
+        if args.save_voltage_maps:
+            target_subs.append("voltage_maps")
+        for sub in target_subs:
             (bp / f"targets/{sub}").mkdir(parents=True, exist_ok=True)
         for p in patterns:
             (bp / f"inputs/voltages_{p}").mkdir(parents=True, exist_ok=True)
@@ -193,7 +209,11 @@ if __name__ == "__main__":
             results = {}
             for p in patterns:
                 res = simulate_forward_process(
-                    trunk, resolution=GRID_RESOLUTION, n_electrodes=e, pattern=p
+                    trunk,
+                    resolution=GRID_RESOLUTION,
+                    n_electrodes=e,
+                    pattern=p,
+                    save_voltage_maps=args.save_voltage_maps,
                 )
                 if res is None:
                     break
@@ -208,7 +228,7 @@ if __name__ == "__main__":
                 save_mesh_once(first_res, bp)
                 mesh_saved[e] = True
 
-            save_sample(first_res, i, bp)
+            save_sample(first_res, i, bp, save_voltage_maps=args.save_voltage_maps)
             for p in patterns:
                 np.save(
                     bp / f"inputs/voltages_{p}/sample_{i:04d}.npy", results[p].eit_result.voltages

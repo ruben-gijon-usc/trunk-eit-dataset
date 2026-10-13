@@ -23,17 +23,6 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.data.data_representations.grid import generate_mask
-from src.data.forward_process import (
-    ForwardResult,
-    check_eidors_available,
-    check_octave_installed,
-    simulate_forward_process,
-)
-from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
-from src.data.models.shape import Harmonic
-from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
-
 from scripts.data.config import (
     ANOMALIES_MAX,
     ANOMALIES_MIN,
@@ -46,6 +35,16 @@ from scripts.data.config import (
     TRUNK_RADIUS_MAX,
     TRUNK_RADIUS_MIN,
 )
+from src.data.data_representations.grid import generate_mask
+from src.data.forward_process import (
+    ForwardResult,
+    check_eidors_available,
+    check_octave_installed,
+    simulate_forward_process,
+)
+from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
+from src.data.models.shape import Harmonic
+from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
 
 # ---------------------------------------------------------------------------
 # Dataset factories
@@ -113,13 +112,18 @@ def get_dataset(n: int) -> list[Trunk]:
 # ---------------------------------------------------------------------------
 
 
-def save_sample(result: ForwardResult, i: int, base_path: Path) -> None:
+def save_sample(
+    result: ForwardResult, i: int, base_path: Path, save_voltage_maps: bool = False
+) -> None:
     """Persist all outputs for one sample."""
     # 1. Targets (Datos crudos para Machine Learning)
     mask = generate_mask(result.trunk, resolution=result.grid.shape[0])
     np.save(base_path / f"targets/grid/{i}.npy", result.grid)
     np.save(base_path / f"targets/mask/{i}.npy", mask)
     np.save(base_path / f"targets/elem_data/{i}.npy", result.eit_result.elem_data)
+
+    if save_voltage_maps and result.eit_result.voltage_maps is not None:
+        np.save(base_path / f"targets/voltage_maps/{i}.npy", result.eit_result.voltage_maps)
 
     # 2. Metadata
     with open(base_path / f"metadata/{i}.json", "w", encoding="utf-8") as fh:
@@ -168,6 +172,12 @@ if __name__ == "__main__":
         help="Patrón de estimulación",
     )
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria")
+    parser.add_argument(
+        "--save_voltage_maps",
+        action="store_true",
+        default=False,
+        help="Guardar mapas 2D del potencial eléctrico interno V(x,y) para PINNs",
+    )
     args = parser.parse_args()
 
     # Validar dependencias (Octave y EIDORS) antes de empezar a generar miles de muestras
@@ -191,7 +201,10 @@ if __name__ == "__main__":
         # Mesh
         (bp / "mesh").mkdir(parents=True, exist_ok=True)
         # Targets
-        for sub in ("grid", "mask", "elem_data"):
+        target_subs = ["grid", "mask", "elem_data"]
+        if args.save_voltage_maps:
+            target_subs.append("voltage_maps")
+        for sub in target_subs:
             (bp / f"targets/{sub}").mkdir(parents=True, exist_ok=True)
         # Inputs
         for p in patterns:
@@ -217,7 +230,11 @@ if __name__ == "__main__":
             results = {}
             for p in patterns:
                 res = simulate_forward_process(
-                    trunk, resolution=GRID_RESOLUTION, n_electrodes=e, pattern=p
+                    trunk,
+                    resolution=GRID_RESOLUTION,
+                    n_electrodes=e,
+                    pattern=p,
+                    save_voltage_maps=args.save_voltage_maps,
                 )
                 if res is None:
                     break
@@ -233,8 +250,8 @@ if __name__ == "__main__":
                 save_mesh_once(first_res, bp)
                 mesh_saved[e] = True
 
-            # Guarda shared targets, metadata y visualizations (incluye UN elem_data del primer resultado)
-            save_sample(first_res, i, bp)
+            # Guarda shared targets, metadata y visualizations
+            save_sample(first_res, i, bp, save_voltage_maps=args.save_voltage_maps)
 
             # Guarda EXCLUSIVAMENTE los voltajes por patrón
             for p in patterns:
