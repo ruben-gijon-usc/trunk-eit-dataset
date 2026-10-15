@@ -22,18 +22,20 @@ from src.data.models import Anomaly, Pos, SimpleTrunk, Trunk
 from src.data.models.shape import Harmonic
 from src.data.models.trunk import Anomaly, SimpleTrunk, Trunk
 from src.data.stochastic.generate_harmonic import StochasticTrunkFactory
+from src.training.dbar.dbar_solver import DBarSolver
 
 # ---------------------------------------------------------------------------
 # Out-Of-Distribution (OOD) Dataset Factory
 # ---------------------------------------------------------------------------
 # Mantenemos las conductividades idénticas al entrenamiento, pero forzamos
-# que la topología (forma geométrica, cantidad y tamaño) sea inédita.
+# que la topología (forma geométrica, cantidad y tamaño) sea inédita y represente
+# un reto severo de generalización morfológica y contraste físico.
 
-OOD_ANOMALIES_MIN = 3
-OOD_ANOMALIES_MAX = 4
-OOD_ANOMALY_RADIUS_MIN = 0.05
-OOD_ANOMALY_RADIUS_MAX = 0.15  # Anomalías más pequeñas pero más numerosas
-OOD_MAX_HARMONIC = 7  # Geometrías más puntiagudas y complejas
+OOD_ANOMALIES_MIN = 2
+OOD_ANOMALIES_MAX = 5
+OOD_ANOMALY_RADIUS_MIN = 0.06
+OOD_ANOMALY_RADIUS_MAX = 0.35
+OOD_MAX_HARMONIC = 9  # Alta complejidad armónica (lóbulos y bordes no convexos)
 
 
 def get_ood_dataset(n: int) -> list[Trunk]:
@@ -45,18 +47,34 @@ def get_ood_dataset(n: int) -> list[Trunk]:
             return random.randint(OOD_ANOMALIES_MIN, OOD_ANOMALIES_MAX)
 
         def _get_random_pos(self, trunk_radius: float) -> Pos:
-            # Posiciones extremas (muy en el centro o pegadas a la corteza)
-            r_normalized = random.choice([random.uniform(0.0, 0.2), random.uniform(0.75, 0.9)])
-            r = trunk_radius * r_normalized
+            # Distribución espacial multizona: núcleo profundo, corteza extrema, zona media o clúster adyacente
+            zone = random.choice(["core", "peripheral", "mid", "cluster"])
+            if zone == "core":
+                r = trunk_radius * random.uniform(0.0, 0.25)
+            elif zone == "peripheral":
+                r = trunk_radius * random.uniform(0.68, 0.86)
+            elif zone == "mid":
+                r = trunk_radius * random.uniform(0.25, 0.68)
+            else:  # cluster
+                r = trunk_radius * random.uniform(0.20, 0.75)
             phi = random.uniform(0, 2 * math.pi)
             return Pos(r=r, phi=phi)
 
         def _get_random_harmonic(
             self, trunk_radius: float, pos: Pos, max_attempts: int = 50
         ) -> Harmonic:
-            r0 = random.uniform(OOD_ANOMALY_RADIUS_MIN, OOD_ANOMALY_RADIUS_MAX)
-            r0 = max(0.01, min(r0, trunk_radius * 0.8))
-            degree = random.randint(3, self.max_harmonic_degree)
+            # Multiescala: alternancia entre cavidades mayores y bolsas de pudrición satélite
+            if random.random() < 0.40:
+                r0 = random.uniform(0.18, OOD_ANOMALY_RADIUS_MAX)
+            else:
+                r0 = random.uniform(OOD_ANOMALY_RADIUS_MIN, 0.18)
+
+            # Acotar el radio máximo para que la forma no sobrepase la corteza
+            max_allowed = max(0.02, (trunk_radius - pos.r) * 0.85)
+            r0 = min(r0, max_allowed)
+
+            # Mayor grado armónico para generar bordes intrincados y lóbulos pronunciados
+            degree = random.randint(4, self.max_harmonic_degree)
 
             for _ in range(max_attempts):
                 harmonics = []
@@ -80,7 +98,16 @@ def get_ood_dataset(n: int) -> list[Trunk]:
             for _ in range(n_anomalies):
                 pos = self._get_random_pos(trunk_radius)
                 shape = self._get_random_harmonic(trunk_radius, pos)
-                cond = random.uniform(COND_ANOMALY_MIN, COND_ANOMALY_MAX)
+
+                # Contrastes heterogéneos dentro del mismo tronco (rot saturado vs moderado vs incipiente)
+                tier = random.choice(["extreme", "moderate", "incipient"])
+                if tier == "extreme":
+                    cond = random.uniform(100.0, COND_ANOMALY_MAX)
+                elif tier == "moderate":
+                    cond = random.uniform(30.0, 100.0)
+                else:
+                    cond = random.uniform(COND_ANOMALY_MIN, 30.0)
+
                 prop = random.choice(self.propagation_modes)
                 anomalies.append(Anomaly(shape, cond, prop))
 
@@ -88,7 +115,11 @@ def get_ood_dataset(n: int) -> list[Trunk]:
                 radius=trunk_radius, base_conductivity=base_conductivity, anomalies=anomalies
             )
 
-    factory = OODFactory(propagation_modes=["Linear", "Cos"], max_harmonic_degree=OOD_MAX_HARMONIC)
+    factory = OODFactory(
+        propagation_modes=["Linear", "Cos", "Constant"],
+        max_harmonic_degree=OOD_MAX_HARMONIC,
+        harmonic_sigma_base=0.35,
+    )
     return [factory.generate() for _ in range(n)]
 
 
@@ -161,6 +192,14 @@ if __name__ == "__main__":
         default=False,
         help="Guardar mapas 2D del potencial eléctrico interno V(x,y) para PINNs",
     )
+    parser.add_argument(
+        "--save_dbar",
+        "--dbar",
+        dest="save_dbar",
+        action="store_true",
+        default=False,
+        help="Reconstruir y guardar imágenes D-Bar durante la generación",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -185,9 +224,20 @@ if __name__ == "__main__":
             (bp / f"targets/{sub}").mkdir(parents=True, exist_ok=True)
         for p in patterns:
             (bp / f"inputs/voltages_{p}").mkdir(parents=True, exist_ok=True)
+            if args.save_dbar:
+                (bp / f"reconstructions/dbar_{p}").mkdir(parents=True, exist_ok=True)
+                (bp / f"visualizations/dbar_{p}").mkdir(parents=True, exist_ok=True)
         (bp / "metadata").mkdir(parents=True, exist_ok=True)
         (bp / "visualizations/grid").mkdir(parents=True, exist_ok=True)
         base_paths[e] = bp
+
+    # Inicializar D-Bar solvers si está activado
+    dbar_solvers = {}
+    if args.save_dbar:
+        for e in electrode_list:
+            dbar_solvers[e] = DBarSolver(
+                n_electrodes=e, r_cutoff=3.5, grid_resolution=GRID_RESOLUTION
+            )
 
     print(
         f"🔬 Generando {args.samples} troncos de TEST ({args.mode.upper()}) para {args.electrodes} electrodos ({args.pattern})..."
@@ -230,9 +280,27 @@ if __name__ == "__main__":
 
             save_sample(first_res, i, bp, save_voltage_maps=args.save_voltage_maps)
             for p in patterns:
-                np.save(
-                    bp / f"inputs/voltages_{p}/sample_{i:04d}.npy", results[p].eit_result.voltages
-                )
+                v_arr = results[p].eit_result.voltages
+                np.save(bp / f"inputs/voltages_{p}/sample_{i:04d}.npy", v_arr)
+
+                if args.save_dbar:
+                    mask = generate_mask(trunk, resolution=GRID_RESOLUTION)
+                    dbar_recon = dbar_solvers[e].reconstruct(v_arr, mask=mask)
+                    dbar_np = dbar_recon.squeeze().cpu().numpy()
+                    np.save(
+                        bp / f"reconstructions/dbar_{p}/sample_{i:04d}.npy",
+                        dbar_np,
+                    )
+                    # Guardar visualización PNG
+                    d_max = dbar_np.max() if dbar_np.max() > 0 else 1.0
+                    norm_d = plt.Normalize(vmin=0.0, vmax=d_max)
+                    rgba_d = plt.get_cmap("viridis")(norm_d(dbar_np))
+                    rgba_d[mask == 0] = [1.0, 1.0, 1.0, 1.0]
+                    plt.imsave(
+                        bp / f"visualizations/dbar_{p}/sample_{i:04d}.png",
+                        rgba_d,
+                        origin="lower",
+                    )
 
         if trunk_failed:
             print("FAILED — saltando")

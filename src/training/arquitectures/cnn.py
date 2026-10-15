@@ -65,8 +65,12 @@ class DynamicCNN(nn.Module):
         return self.deconv(feat)
 
 
-def cnn_metrics_fn(preds, targets, threshold=GROUND_TRUTH_THRESHOLD, mask=None):
-    evaluator = EITMetricsEvaluator(threshold=threshold, data_range=MAX_CONDUCTIVITY)
+def cnn_metrics_fn(
+    preds, targets, threshold=GROUND_TRUTH_THRESHOLD, mask=None, threshold_mode="half_max"
+):
+    evaluator = EITMetricsEvaluator(
+        threshold=threshold, data_range=MAX_CONDUCTIVITY, threshold_mode=threshold_mode
+    )
     rmse_val = evaluator.rmse(preds, targets, mask).item()
     ssim_val = evaluator.ssim(preds, targets, mask).item()
     dice, iou = evaluator.dice_and_iou(preds, targets, mask)

@@ -83,3 +83,27 @@ def test_samplewise_metrics_computation():
     assert math.isclose(res["rmse"][0], 0.0, abs_tol=1e-5)
     assert math.isclose(res["ssim"][0], 1.0, abs_tol=1e-5)
     assert math.isclose(res["dice"][0], 1.0, abs_tol=1e-5)
+
+
+def test_half_max_adaptive_threshold():
+    # Simulates a model with compressed dynamic range (like D-Bar or regularized NN)
+    # Target: wood=1.0, anomaly=100.0
+    # Pred: wood=1.2, anomaly=1.6
+    evaluator_fixed = EITMetricsEvaluator(threshold=6.0, data_range=200.0, threshold_mode="fixed")
+    evaluator_half_max = EITMetricsEvaluator(threshold=6.0, data_range=200.0, threshold_mode="half_max")
+
+    targets = torch.ones(1, 1, 64, 64) * 1.0
+    targets[0, 0, 28:36, 28:36] = 100.0  # Anomaly at center
+
+    preds = torch.ones(1, 1, 64, 64) * 1.2
+    preds[0, 0, 28:36, 28:36] = 1.6  # Relative peak at center
+
+    masks = torch.ones(1, 1, 64, 64)
+
+    dice_fixed, _ = evaluator_fixed.dice_and_iou(preds, targets, masks)
+    dice_hm, _ = evaluator_half_max.dice_and_iou(preds, targets, masks)
+
+    # Fixed threshold gives 0 because preds never cross 6.0
+    assert math.isclose(dice_fixed.item(), 0.0, abs_tol=1e-5)
+    # Half-max detects the relative peak and achieves near-perfect segmentation
+    assert dice_hm.item() > 0.95

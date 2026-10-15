@@ -77,6 +77,10 @@ def run_evaluation_pipeline(
 
     print(f"Entrenando XGBoost en {len(X_tr)} muestras, validando en {len(X_val)} muestras...")
     model_params = {**best_params, "random_state": seed}
+    if model_params.get("n_jobs", -1) == -1:
+        model_params["n_jobs"] = 4
+    if model_params.get("max_depth", 6) > 6:
+        model_params["max_depth"] = 6
     model = xgb.XGBRegressor(**model_params)
     model.fit(X_tr, y_tr)
 

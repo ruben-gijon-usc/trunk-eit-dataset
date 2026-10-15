@@ -17,19 +17,24 @@ from src.training.criterion.combined import HybridEITLoss
 from src.training.train_utils import set_seed, train_model
 
 
-def objective(trial, dataset, input_dim, output_dim, device, epochs, seed: int = 42):
-    n_layers = trial.suggest_int("n_layers", 2, 5)
+def objective(trial, dataset, input_dim, output_dim, device, epochs, patience: int = 12, seed: int = 42):
+    n_layers = trial.suggest_int("n_layers", 2, 4)
 
     hidden_dims = []
     for i in range(n_layers):
         hidden_dims.append(
-            trial.suggest_categorical(f"hidden_dim_l{i}", [128, 256, 512, 1024, 2048])
+            trial.suggest_categorical(f"hidden_dim_l{i}", [128, 256, 512, 1024])
         )
 
-    dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.5)
-    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.4)
+    activation = trial.suggest_categorical("activation", ["relu", "gelu", "leaky_relu"])
+    lr = trial.suggest_float("lr", 1e-4, 3e-3, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
+
+    # Coeficientes ponderados para Hybrid Loss: alpha * RMSE + beta * (1 - SSIM)
+    alpha = trial.suggest_float("alpha", 0.5, 2.0)
+    beta = trial.suggest_float("beta", 0.5, 25.0, log=True)
 
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
@@ -40,9 +45,9 @@ def objective(trial, dataset, input_dim, output_dim, device, epochs, seed: int =
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
-    model = DynamicDNN(input_dim, output_dim, hidden_dims, dropout_rate)
+    model = DynamicDNN(input_dim, output_dim, hidden_dims, dropout_rate, activation=activation)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    criterion = HybridEITLoss(alpha=1.0, beta=10.0, data_range=MAX_CONDUCTIVITY)
+    criterion = HybridEITLoss(alpha=alpha, beta=beta, data_range=MAX_CONDUCTIVITY)
 
     history = train_model(
         model=model,
@@ -51,11 +56,17 @@ def objective(trial, dataset, input_dim, output_dim, device, epochs, seed: int =
         criterion=criterion,
         optimizer=optimizer,
         max_epochs=epochs,
-        patience=10,
+        patience=patience,
         device=device,
         metrics_fn=grid_flattened_metrics_fn,
     )
-    return history.get("best_val_loss", history["val_loss"][-1])
+    best_idx = history.get("best_epoch_idx", -1)
+    best_rmse = history["val_rmse"][best_idx]
+    best_ssim = history["val_ssim"][best_idx]
+    # Métrica de validación invariante: ponderación fija normalizada
+    # para evitar que Optuna minimice artificialmente alpha y beta.
+    val_score = best_rmse + 10.0 * (1.0 - best_ssim)
+    return val_score
 
 
 def main():
@@ -63,13 +74,19 @@ def main():
         description="Tuning de hiperparámetros para DNN con Hybrid Loss (RMSE + SSIM)"
     )
     parser.add_argument("--dataset_dir", type=str, default="dataset/dataset_16e_all")
-    parser.add_argument("--trials", type=int, default=10)
-    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--trials", type=int, default=25, help="Número de iteraciones Optuna (default: 25)")
+    parser.add_argument("--epochs", type=int, default=60, help="Épocas máximas por trial (default: 60)")
+    parser.add_argument("--patience", type=int, default=12, help="Paciencia de Early Stopping (default: 12)")
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria para replicabilidad")
     args = parser.parse_args()
 
+    import os
+    os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
+
     set_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cpu":
+        torch.set_num_threads(8)
     output_dir = Path(__file__).resolve().parent
 
     dataset = EITDataset(PROJECT_ROOT / args.dataset_dir, target_type="grid", flatten_grid=True)
@@ -77,12 +94,14 @@ def main():
     input_dim = sample_x.numel()
     output_dim = sample_y.numel()
 
-    print(f"Buscando hiperparámetros con Optuna para DNN (Seed: {args.seed}, Loss: Hybrid RMSE + SSIM)...")
+    print(f"Buscando hiperparámetros con Optuna para DNN (Seed: {args.seed}, Loss: Hybrid RMSE + SSIM, Trials: {args.trials})...")
     study = optuna.create_study(
         direction="minimize", sampler=optuna.samplers.TPESampler(seed=args.seed)
     )
     study.optimize(
-        lambda trial: objective(trial, dataset, input_dim, output_dim, device, args.epochs, seed=args.seed),
+        lambda trial: objective(
+            trial, dataset, input_dim, output_dim, device, args.epochs, patience=args.patience, seed=args.seed
+        ),
         n_trials=args.trials,
     )
 

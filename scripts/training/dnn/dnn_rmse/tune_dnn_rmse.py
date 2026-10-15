@@ -16,17 +16,18 @@ from src.training.criterion.rmse import MaskedRMSELoss
 from src.training.train_utils import set_seed, train_model
 
 
-def objective(trial, dataset, input_dim, output_dim, device, epochs, seed: int = 42):
-    n_layers = trial.suggest_int("n_layers", 2, 5)
+def objective(trial, dataset, input_dim, output_dim, device, epochs, patience: int = 12, seed: int = 42):
+    n_layers = trial.suggest_int("n_layers", 2, 4)
 
     hidden_dims = []
     for i in range(n_layers):
         hidden_dims.append(
-            trial.suggest_categorical(f"hidden_dim_l{i}", [128, 256, 512, 1024, 2048])
+            trial.suggest_categorical(f"hidden_dim_l{i}", [128, 256, 512, 1024])
         )
 
-    dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.5)
-    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.4)
+    activation = trial.suggest_categorical("activation", ["relu", "gelu", "leaky_relu"])
+    lr = trial.suggest_float("lr", 1e-4, 3e-3, log=True)
     weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
     batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
 
@@ -39,7 +40,7 @@ def objective(trial, dataset, input_dim, output_dim, device, epochs, seed: int =
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
-    model = DynamicDNN(input_dim, output_dim, hidden_dims, dropout_rate)
+    model = DynamicDNN(input_dim, output_dim, hidden_dims, dropout_rate, activation=activation)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     criterion = MaskedRMSELoss()
 
@@ -50,7 +51,7 @@ def objective(trial, dataset, input_dim, output_dim, device, epochs, seed: int =
         criterion=criterion,
         optimizer=optimizer,
         max_epochs=epochs,
-        patience=10,
+        patience=patience,
         device=device,
         metrics_fn=grid_flattened_metrics_fn,
     )
@@ -62,13 +63,19 @@ def main():
         description="Tuning de hiperparámetros para DNN con Masked RMSE Loss"
     )
     parser.add_argument("--dataset_dir", type=str, default="dataset/dataset_16e_all")
-    parser.add_argument("--trials", type=int, default=10)
-    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--trials", type=int, default=25, help="Número de iteraciones Optuna (default: 25)")
+    parser.add_argument("--epochs", type=int, default=60, help="Épocas máximas por trial (default: 60)")
+    parser.add_argument("--patience", type=int, default=12, help="Paciencia de Early Stopping (default: 12)")
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria para replicabilidad")
     args = parser.parse_args()
 
+    import os
+    os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
+
     set_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cpu":
+        torch.set_num_threads(8)
     output_dir = Path(__file__).resolve().parent
 
     dataset = EITDataset(PROJECT_ROOT / args.dataset_dir, target_type="grid", flatten_grid=True)
@@ -76,12 +83,14 @@ def main():
     input_dim = sample_x.numel()
     output_dim = sample_y.numel()
 
-    print(f"Buscando hiperparámetros con Optuna para DNN (Seed: {args.seed}, Loss: Masked RMSE)...")
+    print(f"Buscando hiperparámetros con Optuna para DNN (Seed: {args.seed}, Loss: Masked RMSE, Trials: {args.trials})...")
     study = optuna.create_study(
         direction="minimize", sampler=optuna.samplers.TPESampler(seed=args.seed)
     )
     study.optimize(
-        lambda trial: objective(trial, dataset, input_dim, output_dim, device, args.epochs, seed=args.seed),
+        lambda trial: objective(
+            trial, dataset, input_dim, output_dim, device, args.epochs, patience=args.patience, seed=args.seed
+        ),
         n_trials=args.trials,
     )
 

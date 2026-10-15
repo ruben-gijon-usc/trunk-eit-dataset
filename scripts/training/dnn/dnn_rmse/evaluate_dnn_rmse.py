@@ -26,6 +26,7 @@ def run_evaluation_pipeline(
     output_dim,
     device,
     epochs,
+    patience: int = 15,
     seed: int = 42,
     train_dir="",
     test_id_dir="",
@@ -49,14 +50,17 @@ def run_evaluation_pipeline(
 
     n_layers = best_params["n_layers"]
     hidden_dims = [best_params[f"hidden_dim_l{i}"] for i in range(n_layers)]
+    activation = best_params.get("activation", "relu")
 
-    model = DynamicDNN(input_dim, output_dim, hidden_dims, best_params["dropout_rate"])
+    model = DynamicDNN(
+        input_dim, output_dim, hidden_dims, best_params.get("dropout_rate", 0.0), activation=activation
+    )
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=best_params["lr"], weight_decay=best_params["weight_decay"]
+        model.parameters(), lr=best_params["lr"], weight_decay=best_params.get("weight_decay", 1e-4)
     )
     criterion = MaskedRMSELoss()
 
-    print(f"Entrenando modelo en {train_size} muestras, validando en {val_size} muestras...")
+    print(f"Entrenando modelo en {train_size} muestras, validando en {val_size} muestras (patience={patience})...")
     history = train_model(
         model=model,
         train_loader=train_loader,
@@ -64,7 +68,7 @@ def run_evaluation_pipeline(
         criterion=criterion,
         optimizer=optimizer,
         max_epochs=epochs,
-        patience=10,
+        patience=patience,
         device=device,
         metrics_fn=grid_flattened_metrics_fn,
     )
@@ -128,6 +132,7 @@ def main():
     parser.add_argument("--test_id_dir", type=str, default="dataset/dataset_16e_adjacent_test_id")
     parser.add_argument("--test_ood_dir", type=str, default="dataset/dataset_16e_adjacent_test_ood")
     parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--patience", type=int, default=15, help="Paciencia de Early Stopping (default: 15)")
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria para replicabilidad")
     parser.add_argument(
         "--params_file",
@@ -137,8 +142,13 @@ def main():
     )
     args = parser.parse_args()
 
+    import os
+    os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
+
     set_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cpu":
+        torch.set_num_threads(8)
 
     with open(args.params_file) as f:
         best_params = json.load(f)
@@ -173,6 +183,7 @@ def main():
         output_dim,
         device,
         args.epochs,
+        patience=args.patience,
         seed=args.seed,
         train_dir=args.train_dir,
         test_id_dir=args.test_id_dir,

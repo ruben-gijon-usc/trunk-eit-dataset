@@ -3,8 +3,12 @@ import collections
 import sys
 from pathlib import Path
 
+import os
+os.environ["MPLCONFIGDIR"] = "/tmp/matplotlib"
+
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from torch.utils.data import Subset
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -26,8 +30,26 @@ def evaluate_dataset(
 
     for i in range(n_samples):
         v, target, mask = dataset[i]
-        # D-bar reconstruction
-        pred = solver.reconstruct(v, mask=mask)  # (1, 64, 64)
+        
+        # Cargar reconstrucción precalculada si existe (p. ej. generada con --save_dbar)
+        idx = getattr(dataset, "valid_indices", [str(i)])[i] if hasattr(dataset, "valid_indices") else str(i)
+        recon_path = None
+        if hasattr(dataset, "dataset_dir"):
+            candidate1 = dataset.dataset_dir / f"reconstructions/dbar_adjacent/{idx}.npy"
+            candidate2 = dataset.dataset_dir / f"reconstructions/dbar/{idx}.npy"
+            if candidate1.exists():
+                recon_path = candidate1
+            elif candidate2.exists():
+                recon_path = candidate2
+
+        if recon_path is not None:
+            pred_arr = np.load(recon_path)
+            pred = torch.tensor(pred_arr, dtype=torch.float32)
+            if pred.dim() == 2:
+                pred = pred.unsqueeze(0)
+        else:
+            # Reconstrucción analítica D-bar en tiempo de ejecución
+            pred = solver.reconstruct(v, mask=mask)  # (1, 64, 64)
 
         # Batch dimension for evaluator: (1, 1, 64, 64)
         pred_4d = pred.unsqueeze(0)
@@ -59,7 +81,23 @@ def save_qualitative_pdf(solver: DBarSolver, dataset: EITDataset, output_path: P
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
 
     v, target, mask = dataset[0]
-    pred = solver.reconstruct(v, mask=mask).squeeze().numpy()
+    idx = getattr(dataset, "valid_indices", ["0"])[0] if hasattr(dataset, "valid_indices") else "0"
+    recon_path = None
+    if hasattr(dataset, "dataset_dir"):
+        candidate1 = dataset.dataset_dir / f"reconstructions/dbar_adjacent/{idx}.npy"
+        candidate2 = dataset.dataset_dir / f"reconstructions/dbar/{idx}.npy"
+        if candidate1.exists():
+            recon_path = candidate1
+        elif candidate2.exists():
+            recon_path = candidate2
+
+    if recon_path is not None:
+        pred = np.load(recon_path)
+        if hasattr(pred, "ndim") and pred.ndim == 3:
+            pred = pred.squeeze(0)
+    else:
+        pred = solver.reconstruct(v, mask=mask).squeeze().numpy()
+
     target_np = target.squeeze().numpy()
     mask_np = mask.squeeze().numpy()
 

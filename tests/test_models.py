@@ -20,6 +20,21 @@ def test_dynamic_dnn_forward():
     assert output.shape == (B, out_dim)
 
 
+def test_dynamic_dnn_activations():
+    B = 2
+    in_dim = 208
+    out_dim = 4096
+    dummy_input = torch.randn(B, in_dim)
+
+    for act in ["relu", "gelu", "leaky_relu"]:
+        model = DynamicDNN(
+            input_dim=in_dim, output_dim=out_dim, hidden_dims=[256], dropout_rate=0.05, activation=act
+        )
+        out = model(dummy_input)
+        assert out.shape == (B, out_dim)
+        assert (out >= 0.0).all()  # Final ReLU ensures physical non-negativity
+
+
 def test_dynamic_dnn_backward():
     B = 4
     in_dim = 208

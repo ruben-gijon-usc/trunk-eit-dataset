@@ -34,14 +34,14 @@ def load_data(dataset_dir: str):
 def objective(trial, X, y, seed: int = 42):
     param = {
         "n_estimators": trial.suggest_categorical(
-            "n_estimators", [20, 50, 100]
-        ),  # Pocos para 4096 outputs
-        "max_depth": trial.suggest_int("max_depth", 3, 9),
-        "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
+            "n_estimators", [20, 40, 60]
+        ),  # Acotado para 4096 outputs por árbol
+        "max_depth": trial.suggest_int("max_depth", 3, 6),  # Profundidad >6 genera OOM con 4096 outputs
+        "learning_rate": trial.suggest_float("learning_rate", 1e-2, 0.3, log=True),
         "subsample": trial.suggest_float("subsample", 0.6, 1.0),
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
         "tree_method": "hist",
-        "n_jobs": -1,
+        "n_jobs": 4,  # Acotado a 4 hilos para evitar que los buffers de histogramas desborden la RAM
         "random_state": seed,
     }
 
@@ -61,6 +61,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_dir", type=str, default="dataset/dataset_16e_all")
     parser.add_argument("--trials", type=int, default=10)
+    parser.add_argument("--max_tune_samples", type=int, default=3000, help="Muestras máximas para acelerar tuning de Optuna (0 = todas)")
     parser.add_argument("--seed", type=int, default=42, help="Semilla aleatoria para replicabilidad")
     args = parser.parse_args()
 
@@ -73,7 +74,14 @@ def main():
         print("Error al cargar datos.")
         return
 
-    print(f"Datos cargados: X={X.shape}, y={y.shape}")
+    if args.max_tune_samples > 0 and len(X) > args.max_tune_samples:
+        print(f"Submuestreando a {args.max_tune_samples} muestras representativas para tuning rápido y seguro de RAM...")
+        rng = np.random.RandomState(args.seed)
+        indices = rng.choice(len(X), size=args.max_tune_samples, replace=False)
+        X = X[indices]
+        y = y[indices]
+
+    print(f"Datos para Tuning: X={X.shape}, y={y.shape}")
 
     print(f"\nIniciando Optuna Tuning para XGBoost (Seed: {args.seed})...")
     study = optuna.create_study(
@@ -83,7 +91,7 @@ def main():
 
     best_params = study.best_params
     best_params["tree_method"] = "hist"
-    best_params["n_jobs"] = -1
+    best_params["n_jobs"] = 4
     best_params["random_state"] = args.seed
 
     out_file = output_dir / "best_params_xgboost.json"

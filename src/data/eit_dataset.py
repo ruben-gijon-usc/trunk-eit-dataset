@@ -23,6 +23,17 @@ class EITDataset(Dataset):
         load_voltage_maps: bool = False,
     ):
         self.dataset_dir = Path(dataset_dir)
+        if not self.dataset_dir.exists():
+            d_str = str(self.dataset_dir)
+            if "dataset_16e_all" in d_str:
+                alt = Path(d_str.replace("dataset_16e_all", "dataset_16e_adjacent"))
+                if alt.exists():
+                    self.dataset_dir = alt
+            elif "dataset_16e_adjacent" in d_str:
+                alt = Path(d_str.replace("dataset_16e_adjacent", "dataset_16e_all"))
+                if alt.exists():
+                    self.dataset_dir = alt
+
         self.flatten_grid = flatten_grid
         self.target_type = target_type
         self.normalize = normalize
