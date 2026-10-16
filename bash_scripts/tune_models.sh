@@ -2,21 +2,20 @@
 set -e
 
 # Configuración de búsqueda con Optuna
-TRIALS=25
-XGB_TRIALS=10
-EPOCHS=50
+TRIALS=15
+EPOCHS=100
 SEED=42
 DATASET_DIR="dataset/dataset_16e_adjacent"
 
 echo "==========================================================="
 echo "  Iniciando Búsqueda de Hiperparámetros (Optuna Tuning)"
-echo "  Trials: $TRIALS (XGBoost: $XGB_TRIALS) | Epochs: $EPOCHS | Seed: $SEED"
+echo "  Trials: $TRIALS | Epochs: $EPOCHS | Seed: $SEED"
 echo "  Dataset: $DATASET_DIR"
 echo "==========================================================="
 
 # 1. XGBoost (árboles tabulares, no usa épocas)
 echo -e "\n--- [1/7] Tuning XGBoost ---"
-uv run python scripts/training/xgboost/tune_xgboost.py --trials $XGB_TRIALS --seed $SEED --dataset_dir $DATASET_DIR
+uv run python scripts/training/xgboost/tune_xgboost.py --trials $TRIALS --seed $SEED --dataset_dir $DATASET_DIR
 
 # 2. DynamicDNN
 echo -e "\n--- [2/7] Tuning DynamicDNN (Masked RMSE) ---"
